@@ -21,6 +21,7 @@ const primary = (el, moment) => {
 const declared = (el, moment) => {
   const tr = el.moments?.[moment]?.transition ?? el.transition;
   const changed = el.moments?.[moment]?.changed ?? [];
+  if (!changed.length) return null;
   const i = tr?.properties?.findIndex((p) => p === 'all' || changed.some((c) => c === p || c.startsWith(`${p}-`)));
   return i >= 0 ? { duration: tr.durations[i % tr.durations.length], easing: tr.easings[i % tr.easings.length] } : null;
 };

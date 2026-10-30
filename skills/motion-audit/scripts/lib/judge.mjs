@@ -59,7 +59,7 @@ export const judgeElement = (el, policy = {}) => {
       }
     }
     for (const e of d.motion) for (const m of e.moves) {
-      if (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) add('ease-in', `${moment}: ${e.label} ${m.prop} measured ease-in over ${m.durationMs} ms`, `measured ${e.label} ${m.prop}`);
+      if (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) add('ease-in', `${moment}: ${e.label} ${m.prop} measured ease-in over ${m.durationMs} ms`, `measured ${e.label}`);
       for (const j of m.jumps) add('jump', `${moment}: ${e.label} ${m.prop} jumps ${j.size} at ${j.atMs} ms`, `${moment} ${e.label} ${m.prop}`);
     }
   }

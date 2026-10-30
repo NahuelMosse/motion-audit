@@ -14,7 +14,9 @@
   [role=tab][aria-selected=true] { background: #dde6ff; }
   .menu[hidden] { display: none; }
   .handle { width: 40px; height: 24px; background: #ccc; border-radius: 6px; cursor: grab; }
-  .slider { width: 160px; height: 8px; background: #bbb; border-radius: 4px; }
+  .slider { width: 160px; height: 8px; background: #bbb; border-radius: 4px; transition: background-color 140ms ease-out; }
+  .slider:hover { background: #999; }
+  .slider:active { opacity: 0.8; }
 </style>
 
 </head>
