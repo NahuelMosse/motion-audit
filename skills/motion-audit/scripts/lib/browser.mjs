@@ -1,6 +1,6 @@
 // Helpers that drive the page: tracing a gesture, snapshots, forced pseudo-states over CDP,
 // navigation with redirect checks.
-import { CLIP_MARGIN_PX, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
+import { CLIP_MARGIN_PX, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, LONG_FRAME_UNATTRIBUTED_MS, NAV_TIMEOUT_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
 import { COLS, analyzeRecording } from './series.mjs';
 
 export class AuditError extends Error {}
@@ -23,7 +23,8 @@ export const traced = async (page, root, action) => {
   return { rec, motion: analyzeRecording(rec), long: longFramesBetween(loaf, from, to) };
 };
 
-export const longFramesBetween = (loaf, from, to = Infinity) => loaf.filter(([s, d]) => s + d >= from && s <= to && d > LONG_FRAME_MS).map(([, d, scripts]) => ({ duration: Math.round(d), scripts }));
+// Long frames in [from, to] that an application script (a named source URL) caused, or that are very long.
+export const longFramesBetween = (loaf, from, to = Infinity) => loaf.filter(([s, d, scripts]) => s + d >= from && s <= to && d > LONG_FRAME_MS && ((scripts ?? []).some((x) => x.url) || d >= LONG_FRAME_UNATTRIBUTED_MS)).map(([, d, scripts]) => ({ duration: Math.round(d), scripts }));
 
 // Which scripts a long frame is attributed to, from the LoAF `scripts[]`.
 export const describeLong = (long) => {

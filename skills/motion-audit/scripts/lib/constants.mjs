@@ -1,6 +1,8 @@
 // Named thresholds and timings shared by the analysis and the browser driver.
 export const FRAME_MS = 1000 / 60;
 export const LONG_FRAME_MS = 50;
+// A long frame with no application script behind it is usually the tracer or a busy machine; it only counts when this long.
+export const LONG_FRAME_UNATTRIBUTED_MS = 150;
 export const MIN_PLAYWRIGHT = [1, 43];
 export const SCHEMA_VERSION = 1;
 

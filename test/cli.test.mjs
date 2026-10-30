@@ -57,65 +57,7 @@ test('the JSON report carries the schema version, coverage, loafSupported and st
   assert.equal(r.report.schemaVersion, 1);
   assert.equal(typeof r.report.loafSupported, 'boolean');
   assert.deepEqual(Object.keys(r.report.coverage).sort(), ['audited', 'candidates', 'errored', 'max', 'skipped', 'toggles']);
-  assert.ok(r.report.findings.every((f) => new RegExp(`^${f.kind}:[0-9a-f]{10}import test, { after, before } from 'node:test';
-import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { FIXTURES, ROOT, runCli } from './helpers/cli.mjs';
-import { serve } from './helpers/serve.mjs';
-
-let srv;
-const scratch = mkdtempSync(join(tmpdir(), 'ma-cli-'));
-
-before(async () => {
-  srv = await serve(FIXTURES, {
-    hooks: {
-      '/account.html': (req, res) => {
-        if (!/session=1/.test(req.headers.cookie ?? '')) { res.writeHead(302, { location: '/login' }); return res.end(); }
-        res.writeHead(200, { 'content-type': 'text/html' });
-        res.end(readFileSync(join(FIXTURES, 'account.html')));
-      },
-    },
-  });
-});
-after(async () => {
-  await srv.close();
-  rmSync(scratch, { recursive: true, force: true, maxRetries: 5 });
-});
-
-const run = (fixture, ...args) => runCli([`${srv.url}/${fixture}`, ...args, '--json', '--out', join(scratch, `out-${Math.random().toString(36).slice(2)}`)]);
-
-test('--help prints the usage and exits 0; unknown options and invalid numbers exit 2', async () => {
-  const help = await runCli(['--help']);
-  assert.equal(help.code, 0);
-  assert.match(help.stdout, /Exit: 0 clean, 1 findings, 2 could not run/);
-  const unknown = await runCli(['x.html', '--bogus']);
-  assert.equal(unknown.code, 2);
-  assert.match(unknown.stderr, /unknown option --bogus/);
-  assert.equal((await runCli(['x.html', '--max', 'abc'])).code, 2);
-  assert.equal((await runCli(['x.html', '--cpu', 'fast'])).code, 2);
-  assert.equal((await runCli([])).code, 2);
-});
-
-test('the CLI runs when invoked through a symlink or junction to its scripts folder', async () => {
-  const link = join(scratch, 'linked-scripts');
-  symlinkSync(join(ROOT, 'skills', 'motion-audit', 'scripts'), link, 'junction');
-  const help = await runCli(['--help'], { cli: join(link, 'motion-audit.mjs') });
-  assert.equal(help.code, 0);
-  assert.match(help.stdout, /motion-audit <url\|file>/);
-  const r = await runCli([`${srv.url}/shadcn.html`, '--json', '--out', join(scratch, 'linked-out')], { cli: join(link, 'motion-audit.mjs') });
-  assert.equal(r.code, 0, r.stderr);
-  assert.equal(r.report.schemaVersion, 1);
-  assert.equal(r.report.coverage.audited, 3);
-});
-
-test('the JSON report carries the schema version, coverage, loafSupported and stable finding ids', async () => {
-  const r = await run('shadcn.html');
-  assert.equal(r.report.schemaVersion, 1);
-  assert.equal(typeof r.report.loafSupported, 'boolean');
-  assert.deepEqual(Object.keys(r.report.coverage).sort(), ['audited', 'candidates', 'errored', 'max', 'skipped', 'toggles']);
-  ).test(f.id)));
+  assert.ok(r.report.findings.every((f) => new RegExp(`^${f.kind}:[0-9a-f]{10}$`).test(f.id)));
   const again = await run('shadcn.html');
   assert.deepEqual(again.report.findings.map((f) => f.id).sort(), r.report.findings.map((f) => f.id).sort());
 });

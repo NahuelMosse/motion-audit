@@ -27,16 +27,18 @@
   stuck.addEventListener('pointerdown', () => stuck.classList.add('on'));
   // Hover driven by a requestAnimationFrame loop with a cubic ease-in.
   const js = document.querySelector('.js');
+  let frame = 0;
   js.addEventListener('mouseenter', () => {
-    const start = performance.now();
+    let start = null;
     const step = (now) => {
+      start ??= now;
       const u = Math.min(1, (now - start) / 400);
       js.style.transform = 'translateY(' + (-10 * u ** 3) + 'px)';
-      if (u < 1) requestAnimationFrame(step);
+      if (u < 1) frame = requestAnimationFrame(step);
     };
-    requestAnimationFrame(step);
+    frame = requestAnimationFrame(step);
   });
-  js.addEventListener('mouseleave', () => { js.style.transform = ''; });
+  js.addEventListener('mouseleave', () => { cancelAnimationFrame(frame); js.style.transform = ''; });
 </script>
 </body>
 </html>

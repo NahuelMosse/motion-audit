@@ -2,7 +2,7 @@
 import { join } from 'node:path';
 import {
   CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CONTACT_SHEET_STEP_MS, DENY_SELECTOR, DENY_TEXT, FOCUS_DWELL_MS, FRAME_MS,
-  HIT_TEST_POINTS, HOVER_DWELL_MS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_TAIL_MS, LONG_FRAME_MS, PRESS_DWELL_MS,
+  HIT_TEST_POINTS, HOVER_DWELL_MS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_TAIL_MS, LONG_FRAME_MS, LONG_FRAME_UNATTRIBUTED_MS, PRESS_DWELL_MS,
   REDUCED_LOOP_SPINNER_PX, REST_MARGIN_MS, REST_MAX_MS, REST_MIN_MS, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SETTLE_MARGIN_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
 } from './constants.mjs';
 import { createPseudoStates, diff, load, longFramesBetween, shot, snapshot, toMs, traced } from './browser.mjs';
@@ -249,7 +249,7 @@ export const reducedPass = async (ctx, targets) => {
       const released = await snapshot(h, T);
       per.set(path, { moves: reducedMoves(rest, pressed), residue: reducedResidue(rest, released) });
     }
-    await page.evaluate(scrollPass, { step: 400, stepMs: 60, tail: 600, limit: LONG_FRAME_MS, maxScrollers: 5 });
+    await page.evaluate(scrollPass, { step: 400, stepMs: 60, tail: 600, limit: LONG_FRAME_MS, strongMs: LONG_FRAME_UNATTRIBUTED_MS, maxScrollers: 5 });
     const hidden = await page.evaluate(invisibleContent);
     const infinite = await page.evaluate(infiniteAnimations, { spinnerPx: REDUCED_LOOP_SPINNER_PX });
     return { per, hidden, infinite };

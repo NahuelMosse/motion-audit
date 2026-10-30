@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, SCHEMA_VERSION,
+  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, INTERACTIVE, LONG_FRAME_MS, LONG_FRAME_UNATTRIBUTED_MS, MAX_TOGGLES, SCHEMA_VERSION,
   SCROLL_STEP_MS, SCROLL_STEP_PX, SCROLL_TAIL_MS, TOGGLE, VIEWPORT,
 } from './constants.mjs';
 import { AuditError, TRACER_CONFIG, createPseudoStates, describeLong, load, sameLocation } from './browser.mjs';
@@ -15,7 +15,7 @@ import { tracer } from './page-tracer.mjs';
 import { loadPlaywright } from './playwright.mjs';
 import { auditElement, clickMeasurer, contactSheet, eligibleToggles, probeToggle, reducedPass } from './probes.mjs';
 
-const SCROLL_OPTIONS = { step: SCROLL_STEP_PX, stepMs: SCROLL_STEP_MS, tail: SCROLL_TAIL_MS, limit: LONG_FRAME_MS, maxScrollers: 5 };
+const SCROLL_OPTIONS = { step: SCROLL_STEP_PX, stepMs: SCROLL_STEP_MS, tail: SCROLL_TAIL_MS, limit: LONG_FRAME_MS, strongMs: LONG_FRAME_UNATTRIBUTED_MS, maxScrollers: 5 };
 const MAX_SKIP_EXAMPLES = 3;
 
 // Flaky aspects of a measurement are kept only when most of CONFIRM_RUNS runs agree.

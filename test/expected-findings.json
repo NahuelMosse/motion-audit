@@ -2,82 +2,83 @@
   "bad": {
     "exit": 1,
     "findings": [
-      "error|ease-in|button \"Save\" in main",
-      "error|ease-in|button \"Save\" in main",
-      "error|ease-in|button \"Save\" in main",
-      "error|interrupt-jump|button \"Card\" in main",
-      "error|layout-animated|button \"Save\" in main",
-      "error|long-frame|a#heavy \"Report\" in main",
-      "error|no-focus-feedback|a \"All orders\" in main",
-      "error|reduced-motion-hidden|p \"Every order placed this month.\"",
-      "error|reduced-motion-loop|div.ticker",
-      "error|reduced-motion-moves|button \"Card\" in main",
-      "warning|duration|button \"Closed\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|inconsistent-duration|button hover",
-      "warning|inconsistent-duration|button press",
-      "warning|no-feedback|a \"All orders\" in main",
-      "warning|no-press-feedback|button \"Card\" in main",
-      "warning|transition-all|button \"Save\" in main",
-      "warning|ungated-hover|.card:hover"
+      "error|ease-in:3e84d6ab87|button \"Save\" in main",
+      "error|ease-in:4ac1b995e3|button \"Save\" in main",
+      "error|ease-in:e517b9806a|button \"Save\" in main",
+      "error|interrupt-jump:3cd19e037f|button \"Card\" in main",
+      "error|layout-animated:77da7c66fb|button \"Save\" in main",
+      "error|long-frame:c742964aeb|a#heavy \"Report\" in main",
+      "error|no-focus-feedback:2a46a29dbb|a \"All orders\" in main",
+      "error|reduced-motion-hidden:3302405e58|p \"Every order placed this month.\"",
+      "error|reduced-motion-loop:6467bc4498|div.ticker",
+      "error|reduced-motion-moves:ebccd1e2ec|button \"Card\" in main",
+      "warning|duration:055fd5eeec|button \"Closed\" in main",
+      "warning|duration:8fbcb53835|button \"Save\" in main",
+      "warning|duration:9dbf14ff23|button \"Save\" in main",
+      "warning|duration:b543f10267|button \"Save\" in main",
+      "warning|inconsistent-duration:5e865d44aa|button press",
+      "warning|inconsistent-duration:cc271e7a0a|button hover",
+      "warning|no-feedback:4ad3145828|a \"All orders\" in main",
+      "warning|no-press-feedback:a2bcba4dab|button \"Card\" in main",
+      "warning|transition-all:79a755c654|button \"Save\" in main",
+      "warning|ungated-hover:2012cb98c7|.card:hover"
     ]
   },
   "bad-cpu4": {
     "exit": 1,
     "findings": [
-      "error|ease-in|button \"Save\" in main",
-      "error|ease-in|button \"Save\" in main",
-      "error|ease-in|button \"Save\" in main",
-      "error|interrupt-jump|button \"Card\" in main",
-      "error|layout-animated|button \"Save\" in main",
-      "error|long-frame|a#heavy \"Report\" in main",
-      "error|no-focus-feedback|a \"All orders\" in main",
-      "error|reduced-motion-hidden|p \"Every order placed this month.\"",
-      "error|reduced-motion-loop|div.ticker",
-      "error|reduced-motion-moves|button \"Card\" in main",
-      "warning|duration|button \"Closed\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|inconsistent-duration|button hover",
-      "warning|inconsistent-duration|button press",
-      "warning|no-feedback|a \"All orders\" in main",
-      "warning|no-press-feedback|button \"Card\" in main",
-      "warning|transition-all|button \"Save\" in main",
-      "warning|ungated-hover|.card:hover"
+      "error|ease-in:3e84d6ab87|button \"Save\" in main",
+      "error|ease-in:4ac1b995e3|button \"Save\" in main",
+      "error|ease-in:e517b9806a|button \"Save\" in main",
+      "error|interrupt-jump:3cd19e037f|button \"Card\" in main",
+      "error|layout-animated:77da7c66fb|button \"Save\" in main",
+      "error|long-frame:0c27a12f65|button \"Save\" in main",
+      "error|long-frame:142f4965e3|button#open \"Details\" in main",
+      "error|long-frame:6ce30fe08a|button \"Open\" in main",
+      "error|long-frame:b01ee1f747|button#open \"Details\" in main",
+      "error|long-frame:c742964aeb|a#heavy \"Report\" in main",
+      "error|no-focus-feedback:2a46a29dbb|a \"All orders\" in main",
+      "error|reduced-motion-hidden:3302405e58|p \"Every order placed this month.\"",
+      "error|reduced-motion-loop:6467bc4498|div.ticker",
+      "error|reduced-motion-moves:ebccd1e2ec|button \"Card\" in main",
+      "warning|duration:055fd5eeec|button \"Closed\" in main",
+      "warning|duration:8fbcb53835|button \"Save\" in main",
+      "warning|duration:9dbf14ff23|button \"Save\" in main",
+      "warning|duration:b543f10267|button \"Save\" in main",
+      "warning|inconsistent-duration:5e865d44aa|button press",
+      "warning|inconsistent-duration:cc271e7a0a|button hover",
+      "warning|no-feedback:4ad3145828|a \"All orders\" in main",
+      "warning|no-press-feedback:a2bcba4dab|button \"Card\" in main",
+      "warning|transition-all:79a755c654|button \"Save\" in main",
+      "warning|ungated-hover:2012cb98c7|.card:hover"
     ]
   },
   "bad-click": {
     "exit": 1,
     "findings": [
-      "error|ease-in|button \"Save\" in main",
-      "error|ease-in|button \"Save\" in main",
-      "error|ease-in|button \"Save\" in main",
-      "error|interrupt-jump|button \"Card\" in main",
-      "error|jump|click #open",
-      "error|layout-animated|button \"Save\" in main",
-      "error|layout-animated|click #open",
-      "error|layout-animated|click #open",
-      "error|long-frame|a#heavy \"Report\" in main",
-      "error|long-frame|button \"Closed\" in main",
-      "error|long-frame|button \"Closed\" in main",
-      "error|long-frame|click #open",
-      "error|no-focus-feedback|a \"All orders\" in main",
-      "error|reduced-motion-hidden|p \"Every order placed this month.\"",
-      "error|reduced-motion-loop|div.ticker",
-      "error|reduced-motion-moves|button \"Card\" in main",
-      "warning|duration|button \"Closed\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|duration|button \"Save\" in main",
-      "warning|inconsistent-duration|button hover",
-      "warning|inconsistent-duration|button press",
-      "warning|no-feedback|a \"All orders\" in main",
-      "warning|no-press-feedback|button \"Card\" in main",
-      "warning|transition-all|button \"Save\" in main",
-      "warning|ungated-hover|.card:hover"
+      "error|ease-in:3e84d6ab87|button \"Save\" in main",
+      "error|ease-in:4ac1b995e3|button \"Save\" in main",
+      "error|ease-in:e517b9806a|button \"Save\" in main",
+      "error|interrupt-jump:3cd19e037f|button \"Card\" in main",
+      "error|layout-animated:77da7c66fb|button \"Save\" in main",
+      "error|layout-animated:8ad6b2cc90|click #open",
+      "error|layout-animated:ad15a2aeed|click #open",
+      "error|long-frame:8e851cadb9|click #open",
+      "error|long-frame:c742964aeb|a#heavy \"Report\" in main",
+      "error|no-focus-feedback:2a46a29dbb|a \"All orders\" in main",
+      "error|reduced-motion-hidden:3302405e58|p \"Every order placed this month.\"",
+      "error|reduced-motion-loop:6467bc4498|div.ticker",
+      "error|reduced-motion-moves:ebccd1e2ec|button \"Card\" in main",
+      "warning|duration:055fd5eeec|button \"Closed\" in main",
+      "warning|duration:8fbcb53835|button \"Save\" in main",
+      "warning|duration:9dbf14ff23|button \"Save\" in main",
+      "warning|duration:b543f10267|button \"Save\" in main",
+      "warning|inconsistent-duration:5e865d44aa|button press",
+      "warning|inconsistent-duration:cc271e7a0a|button hover",
+      "warning|no-feedback:4ad3145828|a \"All orders\" in main",
+      "warning|no-press-feedback:a2bcba4dab|button \"Card\" in main",
+      "warning|transition-all:79a755c654|button \"Save\" in main",
+      "warning|ungated-hover:2012cb98c7|.card:hover"
     ]
   },
   "good": {
@@ -87,7 +88,7 @@
   "drawer-bad": {
     "exit": 1,
     "findings": [
-      "error|not-interruptible|button#toggle \"Menu\""
+      "error|not-interruptible:86a24f9f5d|button#toggle \"Menu\""
     ]
   },
   "drawer-good": {
@@ -97,26 +98,28 @@
   "table-toast": {
     "exit": 1,
     "findings": [
-      "error|jump|click #save"
+      "error|long-frame:94f3306463|button#save \"Save\" in main",
+      "error|long-frame:eafadd0166|button#save \"Save\" in main"
     ]
   },
   "overlay-portal": {
     "exit": 1,
     "findings": [
-      "error|layout-animated|click #open"
+      "error|layout-animated:1fed37dd56|click #open"
     ]
   },
   "interactive-state": {
-    "exit": 0,
+    "exit": 1,
     "findings": [
-      "warning|snaps|div#volume"
+      "error|long-frame:0c4a3c63b1|button#delete \"Delete account\" in #remove-form",
+      "warning|snaps:095e4a5a2f|div#volume"
     ]
   },
   "hover-reveal": {
     "exit": 0,
     "findings": [
-      "warning|hover-only-control|button#copy \"Copy link\"",
-      "warning|snaps|button#copy \"Copy link\""
+      "warning|hover-only-control:5d5e5a1f70|button#copy \"Copy link\"",
+      "warning|snaps:e225c7b653|button#copy \"Copy link\""
     ]
   },
   "cookie-banner": {
@@ -130,51 +133,52 @@
   "shadcn": {
     "exit": 0,
     "findings": [
-      "warning|no-feedback|a \"Read the docs\"",
-      "warning|transition-all|button \"Save changes\""
+      "warning|no-feedback:6a82ee342a|a \"Read the docs\"",
+      "warning|transition-all:bf85ca1b0c|button \"Save changes\""
     ]
   },
   "jump": {
     "exit": 1,
     "findings": [
-      "error|jump|click #go"
+      "error|jump:810b7e3b29|click #go"
     ]
   },
   "kinds": {
     "exit": 1,
     "findings": [
-      "error|ease-in|button \"JS ease-in\"",
-      "error|reduced-motion-moves|button \"JS ease-in\"",
-      "warning|linear|button \"Linear lift\"",
-      "warning|no-press-feedback|button \"JS ease-in\"",
-      "warning|reduced-motion-missing|stylesheets",
-      "warning|ungated-hover|.lin:hover"
+      "error|ease-in:fd096ad904|button \"JS ease-in\"",
+      "error|reduced-motion-moves:c919298961|button \"JS ease-in\"",
+      "error|reduced-motion-residue:19d41e7dbe|button \"JS ease-in\"",
+      "warning|linear:1e2e04b872|button \"Linear lift\"",
+      "warning|no-press-feedback:1692c093f4|button \"JS ease-in\"",
+      "warning|reduced-motion-missing:31eb08e79c|stylesheets",
+      "warning|ungated-hover:2655251950|.lin:hover"
     ]
   },
   "kinds-interact": {
     "exit": 1,
     "findings": [
-      "error|ease-in|button \"JS ease-in\"",
-      "error|reduced-motion-moves|button \"JS ease-in\"",
-      "error|reduced-motion-moves|button \"Press leaves a transform\"",
-      "error|reduced-motion-residue|button \"Press leaves a transform\"",
-      "warning|linear|button \"Linear lift\"",
-      "warning|no-press-feedback|button \"JS ease-in\"",
-      "warning|no-press-feedback|button \"Linear lift\"",
-      "warning|reduced-motion-missing|stylesheets",
-      "warning|ungated-hover|.lin:hover"
+      "error|ease-in:fd096ad904|button \"JS ease-in\"",
+      "error|reduced-motion-moves:9f46ee1a23|button \"Press leaves a transform\"",
+      "error|reduced-motion-moves:c919298961|button \"JS ease-in\"",
+      "error|reduced-motion-residue:adb929c36b|button \"Press leaves a transform\"",
+      "warning|linear:1e2e04b872|button \"Linear lift\"",
+      "warning|no-press-feedback:1692c093f4|button \"JS ease-in\"",
+      "warning|no-press-feedback:bc3d015cb6|button \"Linear lift\"",
+      "warning|reduced-motion-missing:31eb08e79c|stylesheets",
+      "warning|ungated-hover:2655251950|.lin:hover"
     ]
   },
   "scroll-jank": {
     "exit": 1,
     "findings": [
-      "error|long-frame|page scroll"
+      "error|long-frame:aee0e640be|page scroll"
     ]
   },
   "dev-build": {
     "exit": 0,
     "findings": [
-      "warning|long-frame|button#heavy \"Heavy hover\""
+      "warning|long-frame:09f4bf85ad|button#heavy \"Heavy hover\""
     ]
   }
 }

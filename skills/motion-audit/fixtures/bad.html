@@ -79,10 +79,11 @@
   const panel = document.getElementById('panel');
   document.getElementById('open').addEventListener('click', () => {
     busy(150);
-    const start = performance.now();
+    let start = null;
     const from = panel.offsetHeight;
     const to = from > 0 ? 0 : 120;
     const step = (now) => {
+      start ??= now;
       const u = Math.min(1, (now - start) / 400);
       panel.style.height = `${from + (to - from) * u}px`;
       if (u < 1) requestAnimationFrame(step);

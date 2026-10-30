@@ -74,7 +74,7 @@ test('--interact never touches the delete button, the drag handle or the slider,
     assert.ok(follows > 0, 'the aria-pressed toggle was probed');
     assert.equal(follows % 2, 0, `${follows} clicks on a persisted toggle`);
     assert.notEqual(await page.evaluate(() => localStorage.getItem('follow')), 'true');
-    assert.ok(report.coverage.toggles.skipped.denied >= 0);
+    assert.ok(report.coverage.toggles.probed >= 1);
   });
 });
 
