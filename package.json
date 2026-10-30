@@ -19,7 +19,8 @@
     "playwright": ">=1.43"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "fixtures": "node test/helpers/fixture-runs.mjs 3"
   },
   "devDependencies": {
     "playwright": "1.43"

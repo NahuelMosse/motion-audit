@@ -1,0 +1,8 @@
+{
+  "name": "motion-audit",
+  "description": "Measures how a running web UI moves, frame by frame, in a real browser.",
+  "owner": { "name": "Nahuel Mosse" },
+  "plugins": [
+    { "name": "motion-audit", "source": "./" }
+  ]
+}

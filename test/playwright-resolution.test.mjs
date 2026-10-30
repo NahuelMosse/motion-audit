@@ -1,12 +1,16 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadPlaywright, versionAtLeast } from '../skills/motion-audit/scripts/lib/playwright.mjs';
 
+const roots = [];
+after(() => { for (const r of roots) rmSync(r, { recursive: true, force: true }); });
+
 const fakeProject = (pkgSource, version) => {
   const root = mkdtempSync(join(tmpdir(), 'ma-pw-'));
+  roots.push(root);
   const dir = join(root, 'node_modules', 'playwright');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'playwright', version, main: 'index.js' }));

@@ -13,32 +13,47 @@ export class ConfigError extends Error {}
 
 // Fingerprint of a finding: stable across runs because it uses the element's label and the
 // moment/property that identifies the finding, never DOM indices or measured numbers.
-export const fingerprint = (f) => createHash('sha1').update(`${f.kind}\n${f.element}\n${f.key ?? ''}`).digest('hex').slice(0, 10);
+export const fingerprint = (f) => `${f.kind}:${createHash('sha1').update(`${f.kind}\n${f.element}\n${f.key ?? ''}`).digest('hex').slice(0, 10)}`;
 
+const ID_PATTERN = /^([a-z-]+):[0-9a-f]{10}$/;
+const hasReason = (x) => typeof x?.reason === 'string' && x.reason.trim().length > 0;
+const rank = (level) => LEVELS.indexOf(level);
+
+// Everything that loosens the audit (bands, tokens, a lowered severity, an ignore) needs a reason.
 export const validateConfig = (raw, source = CONFIG_FILE) => {
   const fail = (m) => { throw new ConfigError(`${source}: ${m}`); };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('must be a JSON object');
   for (const k of Object.keys(raw)) if (!TOP_KEYS.has(k)) fail(`unknown key "${k}" (allowed: ${[...TOP_KEYS].join(', ')})`);
   const bands = { ...BANDS };
-  for (const [g, v] of Object.entries(raw.bands ?? {})) {
+  const bandEntries = Object.entries(raw.bands ?? {}).filter(([g]) => g !== 'reason');
+  if (bandEntries.length && !hasReason(raw.bands)) fail('bands needs a non-empty "reason"');
+  for (const [g, v] of bandEntries) {
     if (!GESTURES.includes(g)) fail(`bands.${g}: unknown gesture (allowed: ${GESTURES.join(', ')})`);
     if (!Array.isArray(v) || v.length !== 2 || v.some((x) => typeof x !== 'number' || x < 0) || v[0] > v[1]) fail(`bands.${g} must be [min, max] in ms`);
     bands[g] = v;
   }
   const durations = raw.tokens?.durations ?? [];
   if (!Array.isArray(durations) || durations.some((x) => typeof x !== 'number' || x <= 0)) fail('tokens.durations must be an array of positive numbers (ms)');
+  if (durations.length && !hasReason(raw.tokens)) fail('tokens needs a non-empty "reason"');
   const severity = {};
   for (const [k, v] of Object.entries(raw.severity ?? {})) {
     if (!KINDS[k]) fail(`severity.${k}: unknown kind`);
-    if (!LEVELS.includes(v)) fail(`severity.${k}: "${v}" is not one of ${LEVELS.join(', ')}`);
-    severity[k] = v;
+    const level = typeof v === 'string' ? v : v?.level;
+    if (!LEVELS.includes(level)) fail(`severity.${k}: level must be one of ${LEVELS.join(', ')}`);
+    if (rank(level) < rank(KINDS[k].level) && !(typeof v === 'object' && hasReason(v))) fail(`severity.${k}: lowering a kind needs { "level": "${level}", "reason": "..." }`);
+    severity[k] = level;
   }
   const ignore = [];
   for (const [i, e] of (raw.ignore ?? []).entries()) {
     if (!e || typeof e !== 'object') fail(`ignore[${i}] must be an object`);
-    if (typeof e.reason !== 'string' || !e.reason.trim()) fail(`ignore[${i}] needs a non-empty "reason"`);
-    if (!e.id && !e.kind) fail(`ignore[${i}] needs "id" (fingerprint) or "kind" (with optional "element")`);
-    if (e.kind && !KINDS[e.kind]) fail(`ignore[${i}].kind "${e.kind}" is not a known kind`);
+    if (!hasReason(e)) fail(`ignore[${i}] needs a non-empty "reason"`);
+    if (e.id !== undefined) {
+      const m = ID_PATTERN.exec(String(e.id));
+      if (!m || !KINDS[m[1]]) fail(`ignore[${i}].id must be a finding id: a known kind, a colon and 10 hex digits`);
+    } else {
+      if (!e.kind || !KINDS[e.kind]) fail(`ignore[${i}] needs "id" (a finding id) or a known "kind" with an "element"`);
+      if (typeof e.element !== 'string' || !/[^*\s]/.test(e.element)) fail(`ignore[${i}].element must name an element; a bare wildcard would silence the whole kind (lower its severity with a reason instead)`);
+    }
     ignore.push({ id: e.id, kind: e.kind, element: e.element, reason: e.reason.trim() });
   }
   return { bands, tokens: { durations }, severity, ignore };
@@ -51,7 +66,7 @@ export const loadConfig = (path, cwd = process.cwd()) => {
     return validateConfig({});
   }
   let raw;
-  try { raw = JSON.parse(readFileSync(file, 'utf8')); } catch (e) { throw new ConfigError(`${file}: invalid JSON (${e.message})`); }
+  try { raw = JSON.parse(readFileSync(file, 'utf8')); } catch (e) { throw new ConfigError(`${file}: not valid JSON (${e instanceof SyntaxError ? 'syntax error; content not shown' : e.code ?? 'unreadable'})`); }
   return validateConfig(raw, file);
 };
 

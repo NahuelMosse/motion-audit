@@ -136,17 +136,19 @@ Do not add motion to silence an `info`, and do not add a scale to every control 
 
 ```json
 {
-  "bands": { "hover": [60, 300] },
-  "tokens": { "durations": [70, 120, 200] },
-  "severity": { "inconsistent-duration": "info" },
+  "bands": { "reason": "Carbon micro-interactions run at 70 ms", "hover": [60, 300] },
+  "tokens": { "reason": "design-system duration tokens", "durations": [70, 120, 200] },
+  "severity": { "inconsistent-duration": { "level": "info", "reason": "size-scaled durations are intended" } },
   "ignore": [
     { "kind": "no-feedback", "element": "a \"Skip to content\"*", "reason": "visible only on focus, by design" },
-    { "id": "3f2a9c1d07", "reason": "tracked in the design-system backlog" }
+    { "id": "no-feedback:3f2a9c1d07", "reason": "tracked in the design-system backlog" }
   ]
 }
 ```
 
-An ignore without a reason is a config error. `--baseline report.json` accepts the findings an earlier
+Anything that loosens the audit (bands, tokens, a lowered or `off` severity, an ignore) needs a
+`reason`; ids are the `kind:hash` shown after each finding, never a wildcard; a kind rule must name an
+element. Raising a severity needs no reason. `--baseline report.json` accepts the findings an earlier
 report already had, so CI fails only on new ones; `compare <ref.json> <mine.json>` lines two reports up
 control by control (measured duration, curve, overshoot) and lists new and gone findings.
 

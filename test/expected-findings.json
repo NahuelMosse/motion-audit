@@ -1,0 +1,180 @@
+{
+  "bad": {
+    "exit": 1,
+    "findings": [
+      "error|ease-in|button \"Save\" in main",
+      "error|ease-in|button \"Save\" in main",
+      "error|ease-in|button \"Save\" in main",
+      "error|interrupt-jump|button \"Card\" in main",
+      "error|layout-animated|button \"Save\" in main",
+      "error|long-frame|a#heavy \"Report\" in main",
+      "error|no-focus-feedback|a \"All orders\" in main",
+      "error|reduced-motion-hidden|p \"Every order placed this month.\"",
+      "error|reduced-motion-loop|div.ticker",
+      "error|reduced-motion-moves|button \"Card\" in main",
+      "warning|duration|button \"Closed\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|inconsistent-duration|button hover",
+      "warning|inconsistent-duration|button press",
+      "warning|no-feedback|a \"All orders\" in main",
+      "warning|no-press-feedback|button \"Card\" in main",
+      "warning|transition-all|button \"Save\" in main",
+      "warning|ungated-hover|.card:hover"
+    ]
+  },
+  "bad-cpu4": {
+    "exit": 1,
+    "findings": [
+      "error|ease-in|button \"Save\" in main",
+      "error|ease-in|button \"Save\" in main",
+      "error|ease-in|button \"Save\" in main",
+      "error|interrupt-jump|button \"Card\" in main",
+      "error|layout-animated|button \"Save\" in main",
+      "error|long-frame|a#heavy \"Report\" in main",
+      "error|no-focus-feedback|a \"All orders\" in main",
+      "error|reduced-motion-hidden|p \"Every order placed this month.\"",
+      "error|reduced-motion-loop|div.ticker",
+      "error|reduced-motion-moves|button \"Card\" in main",
+      "warning|duration|button \"Closed\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|inconsistent-duration|button hover",
+      "warning|inconsistent-duration|button press",
+      "warning|no-feedback|a \"All orders\" in main",
+      "warning|no-press-feedback|button \"Card\" in main",
+      "warning|transition-all|button \"Save\" in main",
+      "warning|ungated-hover|.card:hover"
+    ]
+  },
+  "bad-click": {
+    "exit": 1,
+    "findings": [
+      "error|ease-in|button \"Save\" in main",
+      "error|ease-in|button \"Save\" in main",
+      "error|ease-in|button \"Save\" in main",
+      "error|interrupt-jump|button \"Card\" in main",
+      "error|jump|click #open",
+      "error|layout-animated|button \"Save\" in main",
+      "error|layout-animated|click #open",
+      "error|layout-animated|click #open",
+      "error|long-frame|a#heavy \"Report\" in main",
+      "error|long-frame|button \"Closed\" in main",
+      "error|long-frame|button \"Closed\" in main",
+      "error|long-frame|click #open",
+      "error|no-focus-feedback|a \"All orders\" in main",
+      "error|reduced-motion-hidden|p \"Every order placed this month.\"",
+      "error|reduced-motion-loop|div.ticker",
+      "error|reduced-motion-moves|button \"Card\" in main",
+      "warning|duration|button \"Closed\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|duration|button \"Save\" in main",
+      "warning|inconsistent-duration|button hover",
+      "warning|inconsistent-duration|button press",
+      "warning|no-feedback|a \"All orders\" in main",
+      "warning|no-press-feedback|button \"Card\" in main",
+      "warning|transition-all|button \"Save\" in main",
+      "warning|ungated-hover|.card:hover"
+    ]
+  },
+  "good": {
+    "exit": 0,
+    "findings": []
+  },
+  "drawer-bad": {
+    "exit": 1,
+    "findings": [
+      "error|not-interruptible|button#toggle \"Menu\""
+    ]
+  },
+  "drawer-good": {
+    "exit": 0,
+    "findings": []
+  },
+  "table-toast": {
+    "exit": 1,
+    "findings": [
+      "error|jump|click #save"
+    ]
+  },
+  "overlay-portal": {
+    "exit": 1,
+    "findings": [
+      "error|layout-animated|click #open"
+    ]
+  },
+  "interactive-state": {
+    "exit": 0,
+    "findings": [
+      "warning|snaps|div#volume"
+    ]
+  },
+  "hover-reveal": {
+    "exit": 0,
+    "findings": [
+      "warning|hover-only-control|button#copy \"Copy link\"",
+      "warning|snaps|button#copy \"Copy link\""
+    ]
+  },
+  "cookie-banner": {
+    "exit": 0,
+    "findings": []
+  },
+  "inner-scroll": {
+    "exit": 0,
+    "findings": []
+  },
+  "shadcn": {
+    "exit": 0,
+    "findings": [
+      "warning|no-feedback|a \"Read the docs\"",
+      "warning|transition-all|button \"Save changes\""
+    ]
+  },
+  "jump": {
+    "exit": 1,
+    "findings": [
+      "error|jump|click #go"
+    ]
+  },
+  "kinds": {
+    "exit": 1,
+    "findings": [
+      "error|ease-in|button \"JS ease-in\"",
+      "error|reduced-motion-moves|button \"JS ease-in\"",
+      "warning|linear|button \"Linear lift\"",
+      "warning|no-press-feedback|button \"JS ease-in\"",
+      "warning|reduced-motion-missing|stylesheets",
+      "warning|ungated-hover|.lin:hover"
+    ]
+  },
+  "kinds-interact": {
+    "exit": 1,
+    "findings": [
+      "error|ease-in|button \"JS ease-in\"",
+      "error|reduced-motion-moves|button \"JS ease-in\"",
+      "error|reduced-motion-moves|button \"Press leaves a transform\"",
+      "error|reduced-motion-residue|button \"Press leaves a transform\"",
+      "warning|linear|button \"Linear lift\"",
+      "warning|no-press-feedback|button \"JS ease-in\"",
+      "warning|no-press-feedback|button \"Linear lift\"",
+      "warning|reduced-motion-missing|stylesheets",
+      "warning|ungated-hover|.lin:hover"
+    ]
+  },
+  "scroll-jank": {
+    "exit": 1,
+    "findings": [
+      "error|long-frame|page scroll"
+    ]
+  },
+  "dev-build": {
+    "exit": 0,
+    "findings": [
+      "warning|long-frame|button#heavy \"Heavy hover\""
+    ]
+  }
+}

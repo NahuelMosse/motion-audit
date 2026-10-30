@@ -1,5 +1,7 @@
 // Runs the CLI as a child process and parses its JSON report.
 import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,8 +9,13 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const FIXTURES = join(ROOT, 'skills', 'motion-audit', 'fixtures');
 export const CLI = join(ROOT, 'skills', 'motion-audit', 'scripts', 'motion-audit.mjs');
 
+// Child processes (and the browsers they start) write their temp files here, removed by removeScratch().
+let scratch = null;
+export const removeScratch = () => { if (scratch) rmSync(scratch, { recursive: true, force: true, maxRetries: 5 }); scratch = null; };
+const scratchDir = () => (scratch ??= mkdtempSync(join(tmpdir(), 'ma-run-')));
+
 export const runCli = (args, { cli = CLI, cwd = ROOT, env = {}, timeoutMs = 600000 } = {}) => new Promise((resolve, reject) => {
-  const child = spawn(process.execPath, [cli, ...args], { cwd, env: { ...process.env, ...env } });
+  const child = spawn(process.execPath, [cli, ...args], { cwd, env: { ...process.env, TEMP: scratchDir(), TMP: scratchDir(), TMPDIR: scratchDir(), ...env } });
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (d) => { stdout += d; });

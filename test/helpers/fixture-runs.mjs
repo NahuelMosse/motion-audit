@@ -3,7 +3,7 @@
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { CLI_MATRIX } from '../fixture-matrix.mjs';
-import { FIXTURES, idsOf, kindsOf, runCli } from './cli.mjs';
+import { FIXTURES, idsOf, kindsOf, removeScratch, runCli } from './cli.mjs';
 import { serve } from './serve.mjs';
 
 export const runMatrix = async ({ runs = 3, filter = '', log = console.log } = {}) => {
@@ -25,6 +25,7 @@ export const runMatrix = async ({ runs = 3, filter = '', log = console.log } = {
     }
   } finally {
     await srv.close();
+    removeScratch();
   }
   return results;
 };

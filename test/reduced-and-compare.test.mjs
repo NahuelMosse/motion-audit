@@ -1,10 +1,13 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { reducedMoves, reducedResidue, transformState } from '../skills/motion-audit/scripts/lib/reduced.mjs';
 import { baselineIds, compareReports, readReport } from '../skills/motion-audit/scripts/lib/compare.mjs';
+
+const scratch = mkdtempSync(join(tmpdir(), 'ma-report-'));
+after(() => rmSync(scratch, { recursive: true, force: true }));
 
 const T = (transform = 'none', extra = {}) => ({ transform, translate: 'none', scale: 'none', rotate: 'none', ...extra });
 
@@ -37,7 +40,7 @@ test('compare lists controls whose measured duration or curve differs and the fi
 });
 
 test('readReport rejects other schema versions and baselineIds includes earlier baselined findings', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'ma-report-'));
+  const dir = scratch;
   writeFileSync(join(dir, 'old.json'), JSON.stringify({ schemaVersion: 2, findings: [] }));
   assert.throws(() => readReport(join(dir, 'old.json')), /schemaVersion/);
   assert.throws(() => readReport(join(dir, 'missing.json')), /cannot read/);

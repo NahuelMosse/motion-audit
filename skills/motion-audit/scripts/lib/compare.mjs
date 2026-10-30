@@ -7,7 +7,7 @@ const SIGNIFICANT_OVERSHOOT = 5;
 
 export const readReport = (file) => {
   let report;
-  try { report = JSON.parse(readFileSync(file, 'utf8')); } catch (e) { throw new Error(`cannot read report ${file}: ${e.message}`); }
+  try { report = JSON.parse(readFileSync(file, 'utf8')); } catch (e) { throw new Error(`cannot read report ${file}: ${e instanceof SyntaxError ? 'not valid JSON (content not shown)' : e.code ?? 'unreadable'}`); }
   if (report.schemaVersion !== 1) throw new Error(`${file}: unsupported schemaVersion ${report.schemaVersion} (expected 1)`);
   return report;
 };
