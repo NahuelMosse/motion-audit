@@ -21,6 +21,13 @@ export const runMatrix = async ({ runs = 3, filter = '', log = console.log } = {
       }
       const stable = seen.every((s) => s.sig === seen[0].sig && s.code === seen[0].code);
       results.push({ entry, seen, stable });
+      if (!stable) {
+        const base = new Set(seen[0].sig.split(','));
+        for (const s of seen.slice(1)) {
+          const now = new Set(s.sig.split(','));
+          log(`  differs from run 1: +[${[...now].filter((x) => !base.has(x)).join(' ')}] -[${[...base].filter((x) => !now.has(x)).join(' ')}]`);
+        }
+      }
       log(`${stable ? 'STABLE' : 'FLAKY '} ${entry.name} exit=${seen.map((s) => s.code).join('/')} t=${seen.map((s) => `${s.seconds}s`).join('/')} kinds=${seen[0].kinds.join(', ') || '-'}`);
     }
   } finally {

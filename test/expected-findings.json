@@ -32,10 +32,6 @@
       "error|ease-in:e517b9806a|button \"Save\" in main",
       "error|interrupt-jump:3cd19e037f|button \"Card\" in main",
       "error|layout-animated:77da7c66fb|button \"Save\" in main",
-      "error|long-frame:0c27a12f65|button \"Save\" in main",
-      "error|long-frame:142f4965e3|button#open \"Details\" in main",
-      "error|long-frame:6ce30fe08a|button \"Open\" in main",
-      "error|long-frame:b01ee1f747|button#open \"Details\" in main",
       "error|long-frame:c742964aeb|a#heavy \"Report\" in main",
       "error|no-focus-feedback:2a46a29dbb|a \"All orders\" in main",
       "error|reduced-motion-hidden:3302405e58|p \"Every order placed this month.\"",
@@ -60,6 +56,7 @@
       "error|ease-in:4ac1b995e3|button \"Save\" in main",
       "error|ease-in:e517b9806a|button \"Save\" in main",
       "error|interrupt-jump:3cd19e037f|button \"Card\" in main",
+      "error|interrupt-jump:56f0ce2d37|click #open",
       "error|layout-animated:77da7c66fb|button \"Save\" in main",
       "error|layout-animated:8ad6b2cc90|click #open",
       "error|layout-animated:ad15a2aeed|click #open",
@@ -96,11 +93,8 @@
     "findings": []
   },
   "table-toast": {
-    "exit": 1,
-    "findings": [
-      "error|long-frame:94f3306463|button#save \"Save\" in main",
-      "error|long-frame:eafadd0166|button#save \"Save\" in main"
-    ]
+    "exit": 0,
+    "findings": []
   },
   "overlay-portal": {
     "exit": 1,
@@ -109,9 +103,8 @@
     ]
   },
   "interactive-state": {
-    "exit": 1,
+    "exit": 0,
     "findings": [
-      "error|long-frame:0c4a3c63b1|button#delete \"Delete account\" in #remove-form",
       "warning|snaps:095e4a5a2f|div#volume"
     ]
   },
@@ -148,10 +141,9 @@
     "findings": [
       "error|ease-in:fd096ad904|button \"JS ease-in\"",
       "error|reduced-motion-moves:c919298961|button \"JS ease-in\"",
-      "error|reduced-motion-residue:19d41e7dbe|button \"JS ease-in\"",
       "warning|linear:1e2e04b872|button \"Linear lift\"",
-      "warning|no-press-feedback:1692c093f4|button \"JS ease-in\"",
       "warning|reduced-motion-missing:31eb08e79c|stylesheets",
+      "warning|snaps:61ca9533bf|button \"JS ease-in\"",
       "warning|ungated-hover:2655251950|.lin:hover"
     ]
   },
@@ -163,9 +155,9 @@
       "error|reduced-motion-moves:c919298961|button \"JS ease-in\"",
       "error|reduced-motion-residue:adb929c36b|button \"Press leaves a transform\"",
       "warning|linear:1e2e04b872|button \"Linear lift\"",
-      "warning|no-press-feedback:1692c093f4|button \"JS ease-in\"",
       "warning|no-press-feedback:bc3d015cb6|button \"Linear lift\"",
       "warning|reduced-motion-missing:31eb08e79c|stylesheets",
+      "warning|snaps:61ca9533bf|button \"JS ease-in\"",
       "warning|ungated-hover:2655251950|.lin:hover"
     ]
   },

@@ -13,6 +13,7 @@
   .lin:hover { transform: translateY(-4px); }
   .stuck.on { transform: translateY(10px); }
   .js { transition: none; }
+  .js:active { opacity: 0.85; }
   body { display: grid; gap: 16px; justify-items: start; }
 </style>
 
@@ -32,7 +33,7 @@
     let start = null;
     const step = (now) => {
       start ??= now;
-      const u = Math.min(1, (now - start) / 400);
+      const u = Math.min(1, (now - start) / 250);
       js.style.transform = 'translateY(' + (-10 * u ** 3) + 'px)';
       if (u < 1) frame = requestAnimationFrame(step);
     };
