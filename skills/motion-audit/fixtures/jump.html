@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animation that teleports</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  #box { width: 40px; height: 40px; background: #2a5bd7; margin-top: 24px; }
+</style>
+
+</head>
+<body>
+<button id="go" type="button">Go</button>
+<div id="box"></div>
+<script>
+  // Moves 200 px in 600 ms but skips 150 px at the half-way point.
+  document.getElementById('go').addEventListener('click', () => {
+    const box = document.getElementById('box');
+    const start = performance.now();
+    const step = (now) => {
+      const u = Math.min(1, (now - start) / 600);
+      const x = 200 * u + (u > 0.5 ? 150 : 0);
+      box.style.transform = 'translateX(' + Math.min(350, x) + 'px)';
+      if (u < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+</script>
+</body>
+</html>

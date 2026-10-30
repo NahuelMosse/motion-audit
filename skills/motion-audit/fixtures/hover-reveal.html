@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Control revealed on hover</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  .row { display: flex; gap: 16px; align-items: center; padding: 12px; border: 1px solid #ddd; width: 420px; }
+  .row .actions button { opacity: 0; transition: opacity 150ms ease-out, background-color 140ms ease-out; }
+  .row:hover .actions button { opacity: 1; }
+</style>
+
+</head>
+<body>
+<div class="row"><span>Invoice 1042</span><span class="actions"><button type="button" id="copy">Copy link</button></span></div>
+</body>
+</html>

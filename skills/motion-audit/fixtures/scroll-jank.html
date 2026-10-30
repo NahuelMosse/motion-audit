@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Heavy scroll listener</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  .tall { height: 2400px; background: linear-gradient(#fff, #dde6ff); }
+</style>
+
+</head>
+<body>
+<button id="top" type="button">Top</button>
+<div class="tall"></div>
+<script>
+  const busy = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
+  window.addEventListener('scroll', () => busy(80));
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "name": "motion-audit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Measures how a running web UI moves, frame by frame, in a real browser.",
+  "author": "Nahuel Mosse",
+  "bin": {
+    "motion-audit": "skills/motion-audit/scripts/motion-audit.mjs"
+  },
+  "exports": {
+    ".": "./skills/motion-audit/scripts/lib/index.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.43"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "playwright": "1.43"
+  }
+}
