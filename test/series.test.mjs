@@ -34,6 +34,16 @@ test('a value that teleports mid-motion is a jump when sampled every frame', () 
   assert.equal(found, 30);
 });
 
+test('a toast that fades in, holds and fades out is a round trip with no jumps', () => {
+  const ease = EASINGS['strong ease-out'];
+  const rand = prng(11);
+  const times = withRest(irregularTimes(rand, 0, 1800, 1, 3));
+  const v = times.map((t) => (t <= 0 ? 0 : t < 200 ? ease(t / 200) : t < 1200 ? 1 : 1 - ease((t - 1200) / 200)));
+  const r = analyzeSeries(times, v, 0.02);
+  assert.equal(r.shape, 'round-trip');
+  assert.deepEqual(r.jumps, []);
+});
+
 test('analyzeSeries classifies the curve shapes of a settled motion', () => {
   const times = withRest(Array.from({ length: 40 }, (_, i) => i * FRAME));
   const shape = (f) => analyzeSeries(times, times.map((t) => 100 * f(Math.max(0, t) / 500)), 1).shape;

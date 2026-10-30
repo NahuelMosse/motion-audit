@@ -89,7 +89,9 @@ export const analyzeSeries = (t, v, eps) => {
     }
     shape = [...best.entries()].sort((a, b) => a[1] - b[1])[0][0];
   }
-  const jumps = findJumps(t, v, start, settle, amp, t0, shape);
+  // A round trip (a toast in and out) spans several motions: the average speed of the whole series
+  // says nothing about any one leg, so it is not judged for jumps.
+  const jumps = shape === 'round-trip' ? [] : findJumps(t, v, start, settle, amp, t0, shape);
   return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, durationMs: round(t[settle] - t0, 0), overshootPct, shape, settled, jumps };
 };
 
