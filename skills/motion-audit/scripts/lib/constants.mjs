@@ -4,7 +4,13 @@ export const LONG_FRAME_MS = 50;
 // A frame with no application script behind it counts above LONG_FRAME_MS, or above this multiple of the
 // longest frame a blank page shows on the same machine (a slow VM has long frames with nothing to do).
 export const FRAME_NOISE_FACTOR = 2;
+// A motion of at least SPARSE_MIN_MOTION_MS sampled at fewer than SPARSE_DENSITY samples per 60 Hz
+// frame is measured again (at most SPARSE_RETRIES times), keeping the densest recording.
+export const SPARSE_MIN_MOTION_MS = 100;
+export const SPARSE_DENSITY = 0.7;
+export const SPARSE_RETRIES = 2;
 export const CALIBRATION_CYCLES = 6;
+export const IDLE_NOISE_MS = 1000;
 export const MIN_PLAYWRIGHT = [1, 43];
 export const SCHEMA_VERSION = 1;
 
@@ -59,6 +65,13 @@ export const EASE_IN_MIN_MS = 60;
 // instantaneous velocity (or an Animation object says the animation restarted).
 export const FINE_SAMPLING_MS = 1.5 * FRAME_MS;
 export const JUMP_MAX_DT_MS = 2.5 * FRAME_MS;
+// A settled motion is judged on its own velocities, which are bounded whatever the interval (the mean
+// slope of a smooth curve over an interval never exceeds its steepest slope), so a machine that renders
+// 30 fps with stalls up to this long still gets its teleports found.
+export const SERIES_JUMP_MAX_DT_MS = 6 * FRAME_MS;
+// An interval of a settled motion is a jump when it is a local speed peak (at least twice as fast as
+// both neighbours) and this many times faster than the average speed of the whole motion.
+export const SERIES_PEAK_SLOPE = 5;
 export const JUMP_PEAK_SLOPE = 6;
 export const JUMP_MIN_SHARE = 0.15;
 export const RESTART_MIN_SHARE = 0.1;

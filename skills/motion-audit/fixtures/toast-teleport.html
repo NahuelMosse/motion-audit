@@ -17,7 +17,7 @@
 <button id="show" type="button">Show toast</button>
 <div id="toast" role="status">Saved</div>
 <script>
-  // Slides 350 px in over 600 ms but skips 150 px at the half-way point, holds 300 ms, then slides back out smoothly.
+  // Slides 550 px in over 600 ms but skips 250 px at the half-way point, holds 300 ms, then slides back out smoothly.
   const toast = document.getElementById('toast');
   const run = (ms, at) => new Promise((resolve) => {
     const start = performance.now();
@@ -29,9 +29,9 @@
     requestAnimationFrame(step);
   });
   document.getElementById('show').addEventListener('click', async () => {
-    await run(600, (u) => { toast.style.transform = 'translateX(' + Math.min(350, 200 * u + (u > 0.5 ? 150 : 0)) + 'px)'; });
+    await run(600, (u) => { toast.style.transform = 'translateX(' + Math.min(550, 300 * u + (u > 0.5 ? 250 : 0)) + 'px)'; });
     await new Promise((r) => setTimeout(r, 300));
-    await run(400, (u) => { toast.style.transform = 'translateX(' + 350 * (1 - u) ** 3 + 'px)'; });
+    await run(400, (u) => { toast.style.transform = 'translateX(' + 550 * (1 - u) ** 3 + 'px)'; });
   });
 </script>
 </body>

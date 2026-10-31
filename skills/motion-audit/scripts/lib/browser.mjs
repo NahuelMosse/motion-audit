@@ -1,6 +1,6 @@
 // Helpers that drive the page: tracing a gesture, snapshots, forced pseudo-states over CDP,
 // navigation with redirect checks.
-import { CALIBRATION_CYCLES, CLIP_MARGIN_PX, VIEWPORT, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, RELOAD_WAIT_MS, SETTLE_MAX_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
+import { CALIBRATION_CYCLES, CLIP_MARGIN_PX, IDLE_NOISE_MS, VIEWPORT, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, RELOAD_WAIT_MS, SETTLE_MAX_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
 import { COLS, analyzeRecording } from './series.mjs';
 
 export class AuditError extends Error {}
@@ -28,6 +28,15 @@ export const traced = async (page, root, action) => {
 const limits = new WeakMap();
 export const setUnattributedLimit = (page, ms) => limits.set(page, ms);
 export const unattributedLimit = (page) => limits.get(page) ?? LONG_FRAME_MS;
+
+// The longest frame of the audited page while nothing touches it (ambient animations, a busy
+// machine): a frame at least that long during a gesture says nothing about the gesture.
+export const idleFrameNoise = async (page, ms = IDLE_NOISE_MS) => {
+  const from = await page.evaluate(() => window.__mt.now());
+  await page.waitForTimeout(ms);
+  const loaf = await page.evaluate(() => window.__mt.loaf);
+  return Math.max(0, ...loaf.filter(([s, d]) => s + d >= from).map(([, d]) => d));
+};
 
 // Measures the frames of a blank page doing what the audit does (hover, leave, screenshot): the
 // longest one is the noise of this machine. Returns 0 where Long Animation Frames are unsupported.

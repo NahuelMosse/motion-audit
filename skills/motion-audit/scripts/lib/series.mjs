@@ -1,5 +1,5 @@
 // Pure trajectory analysis: one property sampled over time, curve classification, jump detection.
-import { FRAME_MS, JUMP_MAX_DT_MS, JUMP_MIN_SHARE, JUMP_PEAK_SLOPE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_MS } from './constants.mjs';
+import { FRAME_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_MS } from './constants.mjs';
 
 export const round = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
 export const median = (a) => {
@@ -37,10 +37,10 @@ const findJumps = (t, v, start, settle, amp, t0, shape) => {
   const jumps = [];
   if (settle - start < 4) return jumps;
   const avgVelocity = amp / Math.max(1, t[settle] - t0);
-  const peak = JUMP_PEAK_SLOPE * (shape === 'spring' ? 2 : 1);
+  const peak = SERIES_PEAK_SLOPE * (shape === 'spring' ? 2 : 1);
   const velocity = (k) => {
     const dt = t[k] - t[k - 1];
-    return dt > 0 && dt <= JUMP_MAX_DT_MS ? Math.abs(v[k] - v[k - 1]) / dt : null;
+    return dt > 0 && dt <= SERIES_JUMP_MAX_DT_MS ? Math.abs(v[k] - v[k - 1]) / dt : null;
   };
   for (let k = start + 1; k <= settle; k++) {
     const vel = velocity(k);
@@ -127,7 +127,7 @@ export const analyzeSeries = (t, v, eps, cuts = []) => {
       return (leg?.jumps ?? []).map((j) => ({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size }));
     }).concat(cutJumps(t, v, cuts, eps, range, t0));
   } else jumps = shape === 'round-trip' ? legJumps(t, v, eps, t0) : findJumps(t, v, start, settle, amp, t0, shape);
-  return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, durationMs: round(t[settle] - t0, 0), overshootPct, shape, settled, jumps };
+  return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, durationMs: round(t[settle] - t0, 0), samples: settle - start + 1, overshootPct, shape, settled, jumps };
 };
 
 export const analyzeElement = (el) => {

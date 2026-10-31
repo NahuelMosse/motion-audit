@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import {
   CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CONTACT_SHEET_STEP_MS, DENY_HREF, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
   HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
-  REDUCED_LOOP_SPINNER_PX, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
+  REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
 import { createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced, unattributedLimit } from './browser.mjs';
@@ -22,6 +22,13 @@ const settle = (root, { min = SETTLE_MIN_MS, quiet = SETTLE_QUIET_MS } = {}) => 
 const settlePage = async (page, options) => settle(await page.$('html'), options);
 
 export const denied = (handle) => handle.evaluate(denyReason, DENY);
+
+// Samples per 60 Hz frame of the longest motion in a recording (Infinity when nothing moves for as
+// long as SPARSE_MIN_MOTION_MS): below SPARSE_DENSITY the curve of the motion is not reliable.
+export const sparsity = (motion) => {
+  const long = motion.flatMap((e) => e.moves).filter((m) => m.durationMs >= SPARSE_MIN_MOTION_MS && m.samples !== undefined);
+  return long.length ? Math.max(...long.map((m) => m.samples / (m.durationMs / FRAME_MS))) : Infinity;
+};
 
 // A real press is released away from the control, which still makes the browser dispatch a click
 // on the common ancestor (the body) and start a native drag on links. Both are cancelled before
@@ -77,7 +84,16 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   if (info.kind !== 'focus-only') {
     const base = await snapshot(proxy, VISIBLE_PROPS);
     const basePx = await shot(page, box);
-    const hover = await traced(page, proxy, async () => { await page.mouse.move(point.x, point.y); await settle(proxy); });
+    const hoverOnce = () => traced(page, proxy, async () => { await page.mouse.move(point.x, point.y); await settle(proxy); });
+    let hover = await hoverOnce();
+    // A machine that renders few frames can sample a motion too coarsely to classify its curve: hover
+    // again and keep the densest recording.
+    for (let again = 0; again < SPARSE_RETRIES && sparsity(hover.motion) < SPARSE_DENSITY; again++) {
+      await page.mouse.move(1, 1);
+      await settle(proxy);
+      const next = await hoverOnce();
+      if (sparsity(next.motion) > sparsity(hover.motion)) hover = next;
+    }
     if (hoverOnly && (await stillTransparent(proxy))) return { skipped: 'hidden' };
     const hovered = await snapshot(proxy, VISIBLE_PROPS);
     const hoverPx = await shot(page, box);

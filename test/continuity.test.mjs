@@ -64,6 +64,20 @@ test('a keyframe animation that restarts at its from value is flagged at any sam
   }
 });
 
+test('a restart event that fires well after the frame timestamp of a slow machine is still tied to the step', () => {
+  const ease = EASINGS['strong ease-out'];
+  let flagged = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const rand = prng(seed * 23);
+    const dur = 500 + Math.floor(rand() * 200);
+    const { m, rec } = interrupted({ ease, dur, share: 0.4, rand, minF: 2, maxF: 3, after: restartAtFrom(ease, dur) });
+    // The cancel event is dispatched 60 ms after the mark: later than the first frames sampled after it.
+    rec.anims = [{ t: m + 60, nodeId: 1, type: 'cancel', props: ['transform'], explicitFrom: false }];
+    if (interruptionJumps(rec, m, { durationMs: dur }).length) flagged++;
+  }
+  assert.equal(flagged, 40);
+});
+
 test('a restart is attributed to the animated element and its descendants only', () => {
   const ease = EASINGS['strong ease-out'];
   const rand = prng(5);

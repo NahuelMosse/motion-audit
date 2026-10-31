@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { interruptionJumps } from '../skills/motion-audit/scripts/lib/continuity.mjs';
+import { sparsity } from '../skills/motion-audit/scripts/lib/probes.mjs';
 import { analyzeRecording, analyzeSeries } from '../skills/motion-audit/scripts/lib/series.mjs';
 import { EASINGS, FRAME, irregularTimes, prng, txElement } from './helpers/curves.mjs';
 
@@ -69,6 +70,33 @@ test('smooth legs with different amplitudes of speed never report a jump at any 
       }
     }
   }
+});
+
+test('a teleport is found when the machine renders 30 fps with stalls, and smooth curves stay clean at that cadence', () => {
+  const ease = EASINGS['strong ease-out'];
+  let found = 0;
+  let falsePositives = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    const rand = prng(seed * 31);
+    const times = withRest(irregularTimes(rand, 0, 1400, 1, 3)); // 1 to 3 frames: 17 to 50 ms, stalls included
+    const jumpy = times.map((t) => (t <= 0 ? 0 : Math.min(350, 200 * Math.min(1, t / 600) + (t > 300 ? 150 : 0))));
+    if (analyzeSeries(times, jumpy, 1)?.jumps.length) found++;
+    const smooth = times.map((t) => (t <= 0 ? 0 : 350 * ease(t / 600)));
+    if (analyzeSeries(times, smooth, 1)?.jumps.length) falsePositives++;
+  }
+  assert.ok(found >= 54, `${found} of 60 teleports found`);
+  assert.equal(falsePositives, 0);
+});
+
+test('sparsity tells a densely sampled motion from one sampled every 50 ms', () => {
+  const ease = EASINGS['strong ease-out'];
+  const motion = (step) => {
+    const times = withRest(Array.from({ length: Math.ceil(900 / step) }, (_, i) => i * step));
+    return analyzeRecording({ elems: [txElement(times, times.map((t) => (t <= 0 ? 0 : 100 * ease(t / 400))))], marks: [], anims: [] });
+  };
+  assert.ok(sparsity(motion(FRAME)) >= 0.9, `dense: ${sparsity(motion(FRAME))}`);
+  assert.ok(sparsity(motion(50)) < 0.5, `sparse: ${sparsity(motion(50))}`);
+  assert.equal(sparsity([]), Infinity);
 });
 
 // ---------- a node removed and a new one mounted in its place (React `key` change) ----------

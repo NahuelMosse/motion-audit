@@ -49,7 +49,7 @@ export const interruptionJumps = (rec, markT, { durationMs, small = false, longF
         const dt = t[k] - t[k - 1];
         // An Animation object that restarted is strong evidence, so a smaller step suffices than
         // for a position-only teleport judged in small mode.
-        const restarted = own.some((a) => isRestart(a) && a.t >= markT - RESTART_EVENT_SLACK_MS && a.t <= t[k] + RESTART_EVENT_SLACK_MS);
+        const restarted = own.some((a) => isRestart(a) && a.t >= markT - RESTART_EVENT_SLACK_MS && a.t <= t[k] + Math.max(RESTART_EVENT_SLACK_MS, 2 * dt));
         if (d < Math.max(min, (small && !restarted ? SMALL_MIN_SHARE : RESTART_MIN_SHARE) * range)) continue;
         if (!restarted && longFrames.some(([s, len]) => s <= t[k] + LONG_FRAME_STEP_SLACK_MS && s + len >= t[k - 1] - LONG_FRAME_STEP_SLACK_MS)) continue;
         const teleports = !transitionOnly && fine && dt > 0 && dt <= JUMP_MAX_DT_MS && d / dt > (JUMP_PEAK_SLOPE * range) / dur;

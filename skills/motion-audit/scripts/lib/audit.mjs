@@ -7,7 +7,7 @@ import {
   SCROLL_STEP_MS, SCROLL_STEP_PX, SCROLL_TAIL_MS, TOGGLE, VIEWPORT,
 } from './constants.mjs';
 import { UsageError } from './args.mjs';
-import { AuditError, TRACER_CONFIG, createPixelComparer, calibrateFrames, createPseudoStates, describeLong, load, longFramesBetween, sameLocation, setUnattributedLimit, unattributedLimit } from './browser.mjs';
+import { AuditError, TRACER_CONFIG, createPixelComparer, calibrateFrames, idleFrameNoise, createPseudoStates, describeLong, load, longFramesBetween, sameLocation, setUnattributedLimit, unattributedLimit } from './browser.mjs';
 import { baselineIds, readReport } from './compare.mjs';
 import { finalize, loadConfig, validateConfig } from './config.mjs';
 import { inconsistencies, judgeElement } from './judge.mjs';
@@ -96,10 +96,10 @@ export const audit = async (pageOrUrl, o = {}) => {
     if (first.redirected) notes.push(`${url} redirected to ${landed}`);
     const pseudo = await createPseudoStates(context, page);
     pixels = await createPixelComparer(context);
-    const noise = await calibrateFrames(context);
+    const noise = Math.max(await calibrateFrames(context), await idleFrameNoise(page));
     const unattributedMs = Math.max(LONG_FRAME_MS, Math.ceil(noise * FRAME_NOISE_FACTOR));
     setUnattributedLimit(page, unattributedMs);
-    if (unattributedMs > LONG_FRAME_MS) notes.push(`this machine is slow (a blank page shows frames of ${Math.round(noise)} ms): frames with no application script count only above ${unattributedMs} ms`);
+    if (unattributedMs > LONG_FRAME_MS) notes.push(`this machine or page is noisy (frames of ${Math.round(noise)} ms with nothing happening): frames with no application script count only above ${unattributedMs} ms`);
     const ctx = { page, context, pseudo, pixels, url, interact: Boolean(o.interact), loadOptions, notes };
     const devServer = await page.evaluate(devSignals);
     if (devServer.length) notes.push(`development build detected (${devServer.join(', ')}): long frames are reported as warnings; audit a production build (next start, vite preview) for them to count`);
