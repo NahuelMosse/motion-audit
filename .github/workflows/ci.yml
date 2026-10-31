@@ -114,8 +114,9 @@ jobs:
           set +e
           node skills/motion-audit/scripts/motion-audit.mjs http://127.0.0.1:8765/bad.html > /dev/null
           bad=$?
-          node skills/motion-audit/scripts/motion-audit.mjs http://127.0.0.1:8765/good.html > /dev/null
+          node skills/motion-audit/scripts/motion-audit.mjs http://127.0.0.1:8765/good.html > good.out
           good=$?
+          [ "$good" = "0" ] || cat good.out
           node skills/motion-audit/scripts/motion-audit.mjs http://127.0.0.1:8765/shadcn.html --only '#nothing' > /dev/null
           empty=$?
           kill $server

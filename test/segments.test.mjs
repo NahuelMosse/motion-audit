@@ -107,6 +107,14 @@ test('the first moved sample of a series is reported, so a motion started by a c
   assert.equal(r.startT, 1000);
 });
 
+test('a jump in a frame that overlaps a long frame is the long frame; elsewhere it stays a jump', () => {
+  const times = withRest(irregularTimes(prng(4), 0, 1000, 1, 1));
+  const v = times.map((t) => (t <= 0 ? 0 : Math.min(350, 200 * Math.min(1, t / 600) + (t > 300 ? 150 : 0))));
+  const at = analyzeSeries(times, v, 1).jumps[0].atMs;
+  assert.deepEqual(analyzeSeries(times, v, 1, [], [[at - 20, 150]]).jumps, []);
+  assert.equal(analyzeSeries(times, v, 1, [], [[900, 80]]).jumps.length, 1);
+});
+
 test('sparsity tells a densely sampled motion from one sampled every 50 ms', () => {
   const ease = EASINGS['strong ease-out'];
   const motion = (step) => {

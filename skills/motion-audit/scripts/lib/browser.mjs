@@ -20,7 +20,7 @@ export const traced = async (page, root, action) => {
   const rec = await page.evaluate(() => window.__mt.end('m'));
   const to = await page.evaluate(() => window.__mt.now());
   const loaf = await page.evaluate(() => window.__mt.loaf);
-  return { rec, motion: analyzeRecording(rec), long: longFramesBetween(loaf, from, to, unattributedLimit(page)) };
+  return { rec, motion: analyzeRecording(rec, { longFrames: longWindows(loaf, from) }), long: longFramesBetween(loaf, from, to, unattributedLimit(page)) };
 };
 
 // How long a frame with no application script must be to count: LONG_FRAME_MS, or more on a machine

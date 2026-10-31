@@ -1,5 +1,5 @@
 // Pure trajectory analysis: one property sampled over time, curve classification, jump detection.
-import { FRAME_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_MS } from './constants.mjs';
+import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_MS } from './constants.mjs';
 
 export const round = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
 export const median = (a) => {
@@ -84,7 +84,7 @@ const cutJumps = (t, v, cuts, eps, range, t0) => cuts.flatMap((c) => {
 });
 
 // One property over time (`t` ms, `v` values): duration, overshoot, curve shape and jumps.
-export const analyzeSeries = (t, v, eps, cuts = []) => {
+export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
   const n = v.length;
   if (n < 4) return null;
   const first = v[0];
@@ -127,13 +127,21 @@ export const analyzeSeries = (t, v, eps, cuts = []) => {
       return (leg?.jumps ?? []).map((j) => ({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size }));
     }).concat(cutJumps(t, v, cuts, eps, range, t0));
   } else jumps = shape === 'round-trip' ? legJumps(t, v, eps, t0) : findJumps(t, v, start, settle, amp, t0, shape);
+  // A step in a frame that overlaps a long frame is that frame: the animation's clock ran on while the thread was blocked.
+  if (longFrames.length) {
+    jumps = jumps.filter((j) => {
+      const k = t.findIndex((x) => Math.abs(x - (t0 + j.atMs)) < 1.5);
+      const [from, to] = k > 0 ? [t[k - 1], t[k]] : [t0 + j.atMs, t0 + j.atMs];
+      return !longFrames.some(([s, len]) => s <= to + LONG_FRAME_STEP_SLACK_MS && s + len >= from - LONG_FRAME_STEP_SLACK_MS);
+    });
+  }
   return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, firstT: t[start], durationMs: round(t[settle] - t0, 0), samples: settle - start + 1, overshootPct, shape, settled, jumps };
 };
 
-export const analyzeElement = (el) => {
+export const analyzeElement = (el, longFrames = []) => {
   const moves = [];
   for (const c of COLS) {
-    const r = analyzeSeries(el.t, c === 'rot' ? unwrap(el[c]) : el[c], EPS[PROP_OF[c]], el.cuts);
+    const r = analyzeSeries(el.t, c === 'rot' ? unwrap(el[c]) : el[c], EPS[PROP_OF[c]], el.cuts, longFrames);
     if (r) moves.push({ prop: PROP_OF[c], ...r });
   }
   return moves.length ? { label: el.label, root: el.root, moves } : null;
@@ -171,7 +179,8 @@ export const joinRemounts = (elems) => {
   });
 };
 
-export const analyzeRecording = (rec) => joinRemounts(rec?.elems ?? []).map(analyzeElement).filter(Boolean);
+// `longFrames`: [[startMs, durationMs]] of the recording's long frames: jumps they explain are not reported.
+export const analyzeRecording = (rec, { longFrames = [] } = {}) => joinRemounts(rec?.elems ?? []).map((e) => analyzeElement(e, longFrames)).filter(Boolean);
 
 // 'ease-in' when the curve starts slower than it ends; 'linear'; otherwise 'ok'.
 export const easingKind = (e) => {

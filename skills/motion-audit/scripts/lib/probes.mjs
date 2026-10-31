@@ -270,7 +270,7 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
     const rec = traced2.rec;
     // What was already moving before the click (loops, carousels) is ambient, not the click's motion.
     const clickT = rec.marks[0] ?? Infinity;
-    const moved = analyzeRecording(rec).map((e) => ({ ...e, moves: e.moves.filter((m) => m.firstT >= clickT - 2 * FRAME_MS) })).filter((e) => e.moves.length);
+    const moved = analyzeRecording(rec, { longFrames: longWindows(traced2.loaf, traced2.from) }).map((e) => ({ ...e, moves: e.moves.filter((m) => m.firstT >= clickT - 2 * FRAME_MS) })).filter((e) => e.moves.length);
     return {
       moved,
       long: longFramesBetween(quiet.loaf, quiet.from, Infinity, unattributedLimit(page)),
