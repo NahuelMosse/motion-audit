@@ -1,6 +1,6 @@
 // Helpers that drive the page: tracing a gesture, snapshots, forced pseudo-states over CDP,
 // navigation with redirect checks.
-import { CLIP_MARGIN_PX, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, RELOAD_WAIT_MS, SETTLE_MAX_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
+import { CALIBRATION_CYCLES, CLIP_MARGIN_PX, VIEWPORT, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, RELOAD_WAIT_MS, SETTLE_MAX_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
 import { COLS, analyzeRecording } from './series.mjs';
 
 export class AuditError extends Error {}
@@ -20,7 +20,41 @@ export const traced = async (page, root, action) => {
   const rec = await page.evaluate(() => window.__mt.end('m'));
   const to = await page.evaluate(() => window.__mt.now());
   const loaf = await page.evaluate(() => window.__mt.loaf);
-  return { rec, motion: analyzeRecording(rec), long: longFramesBetween(loaf, from, to) };
+  return { rec, motion: analyzeRecording(rec), long: longFramesBetween(loaf, from, to, unattributedLimit(page)) };
+};
+
+// How long a frame with no application script must be to count: LONG_FRAME_MS, or more on a machine
+// whose frames are slow with nothing to do (see calibrateFrames).
+const limits = new WeakMap();
+export const setUnattributedLimit = (page, ms) => limits.set(page, ms);
+export const unattributedLimit = (page) => limits.get(page) ?? LONG_FRAME_MS;
+
+// Measures the frames of a blank page doing what the audit does (hover, leave, screenshot): the
+// longest one is the noise of this machine. Returns 0 where Long Animation Frames are unsupported.
+export const calibrateFrames = async (context) => {
+  const page = await context.newPage();
+  try {
+    await page.setViewportSize(VIEWPORT);
+    await page.setContent('<body style="margin:0"><style>button{margin:40px;padding:8px 14px;transition:background-color 140ms}button:hover{background:#ddd}</style><button id="b">Probe</button>' + '<p>text</p>'.repeat(200) + '</body>');
+    await page.evaluate(() => {
+      window.__noise = [];
+      if (PerformanceObserver.supportedEntryTypes?.includes('long-animation-frame')) new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__noise.push(e.duration); }).observe({ type: 'long-animation-frame', buffered: true });
+    });
+    const box = await (await page.$('#b')).boundingBox();
+    const clip = { x: box.x - 6, y: box.y - 6, width: box.width + 12, height: box.height + 12 };
+    for (let i = 0; i < CALIBRATION_CYCLES; i++) {
+      await page.mouse.move(box.x + 5, box.y + 5);
+      await page.waitForTimeout(150);
+      await page.screenshot({ clip });
+      await page.mouse.move(1, 1);
+      await page.waitForTimeout(150);
+    }
+    return Math.max(0, ...(await page.evaluate(() => window.__noise)));
+  } catch {
+    return 0;
+  } finally {
+    await page.close().catch(() => {});
+  }
 };
 
 // The part of a frame's time that is the audit's own work: scripts with no source URL (the tracer's
@@ -29,9 +63,10 @@ export const traced = async (page, root, action) => {
 const auditWork = (scripts) => scripts.filter((s) => !s.url).reduce((sum, s) => sum + Math.max(0, s.duration - (s.forced ?? 0)), 0);
 
 // Long frames (over LONG_FRAME_MS) in [from, to] that are the page's: what is left of a frame once
-// the audit's own script time is taken out. Frames with no script at all (style, layout, paint) count.
-export const longFramesBetween = (loaf, from, to = Infinity) => loaf
-  .filter(([s, d, scripts]) => s + d >= from && s <= to && d - auditWork(scripts ?? []) > LONG_FRAME_MS)
+// the audit's own script time is taken out. Frames with no script at all (style, layout, paint) count
+// when they are over `unattributedMs`.
+export const longFramesBetween = (loaf, from, to = Infinity, unattributedMs = LONG_FRAME_MS) => loaf
+  .filter(([s, d, scripts]) => s + d >= from && s <= to && d - auditWork(scripts ?? []) > ((scripts ?? []).some((x) => x.url) ? LONG_FRAME_MS : unattributedMs))
   .map(([, d, scripts]) => ({ duration: Math.round(d), scripts: (scripts ?? []).filter((x) => x.url) }));
 
 // [[start, duration]] of every long frame that ends after `from`, whoever caused it.

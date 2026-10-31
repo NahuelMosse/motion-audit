@@ -6,7 +6,7 @@ import {
   REDUCED_LOOP_SPINNER_PX, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
-import { createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced } from './browser.mjs';
+import { createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced, unattributedLimit } from './browser.mjs';
 import { interruptionJumps } from './continuity.mjs';
 import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
@@ -250,7 +250,7 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
     const moved = analyzeRecording(rec).map((e) => ({ ...e, moves: e.moves.filter((m) => m.startT >= clickT - 2 * FRAME_MS) })).filter((e) => e.moves.length);
     return {
       moved,
-      long: longFramesBetween(quiet.loaf, quiet.from),
+      long: longFramesBetween(quiet.loaf, quiet.from, Infinity, unattributedLimit(page)),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && m.durationMs > 2 * FRAME_MS).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
       interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from) }) : [],

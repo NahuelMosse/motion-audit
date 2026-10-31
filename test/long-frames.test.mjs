@@ -33,6 +33,12 @@ test('a frame with an application script counts whatever the injected scripts di
   assert.match(describeLong(found).culprit, /^scripts: app\.js 60 ms$/);
 });
 
+test('on a slow machine a frame with no application script must be longer than the machine\'s own noise, a frame with an application script still counts from 50 ms', () => {
+  const loaf = [[100, 93, []], [300, 130, []], [500, 60, [app(55)]]];
+  assert.deepEqual(longFramesBetween(loaf, 0, Infinity, 120).map((f) => f.duration), [130, 60]);
+  assert.deepEqual(longFramesBetween(loaf, 0).map((f) => f.duration), [93, 130, 60]);
+});
+
 test('only frames overlapping the window count', () => {
   const loaf = [[0, 80, []], [1000, 80, []], [5000, 80, []]];
   assert.deepEqual(longFramesBetween(loaf, 900, 2000).map((f) => f.duration), [80]);

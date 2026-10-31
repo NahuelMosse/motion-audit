@@ -1,6 +1,10 @@
 // Named thresholds and timings shared by the analysis and the browser driver.
 export const FRAME_MS = 1000 / 60;
 export const LONG_FRAME_MS = 50;
+// A frame with no application script behind it counts above LONG_FRAME_MS, or above this multiple of the
+// longest frame a blank page shows on the same machine (a slow VM has long frames with nothing to do).
+export const FRAME_NOISE_FACTOR = 2;
+export const CALIBRATION_CYCLES = 6;
 export const MIN_PLAYWRIGHT = [1, 43];
 export const SCHEMA_VERSION = 1;
 

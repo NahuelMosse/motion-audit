@@ -21,7 +21,6 @@ export const CLI_MATRIX = [
   { name: 'kinds-interact', fixture: 'kinds.html', args: ['--interact'] },
   { name: 'scroll-jank', fixture: 'scroll-jank.html', args: [] },
   { name: 'dev-build', fixture: 'dev-build.html', args: [] },
-  { name: 'relayout-hover', fixture: 'relayout-hover.html', args: [] },
   { name: 'toast-teleport', fixture: 'toast-teleport.html', args: ['--click', '#show'] },
   { name: 'remount', fixture: 'remount.html', args: ['--click', '#open'] },
   { name: 'pixel-noise', fixture: 'pixel-noise.html', args: [] },

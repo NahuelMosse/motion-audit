@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, RECOUNT_AFTER_MS, SCHEMA_VERSION,
+  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, RECOUNT_AFTER_MS, SCHEMA_VERSION,
   SCROLL_STEP_MS, SCROLL_STEP_PX, SCROLL_TAIL_MS, TOGGLE, VIEWPORT,
 } from './constants.mjs';
 import { UsageError } from './args.mjs';
-import { AuditError, TRACER_CONFIG, createPixelComparer, createPseudoStates, describeLong, load, longFramesBetween, sameLocation } from './browser.mjs';
+import { AuditError, TRACER_CONFIG, createPixelComparer, calibrateFrames, createPseudoStates, describeLong, load, longFramesBetween, sameLocation, setUnattributedLimit, unattributedLimit } from './browser.mjs';
 import { baselineIds, readReport } from './compare.mjs';
 import { finalize, loadConfig, validateConfig } from './config.mjs';
 import { inconsistencies, judgeElement } from './judge.mjs';
@@ -96,6 +96,10 @@ export const audit = async (pageOrUrl, o = {}) => {
     if (first.redirected) notes.push(`${url} redirected to ${landed}`);
     const pseudo = await createPseudoStates(context, page);
     pixels = await createPixelComparer(context);
+    const noise = await calibrateFrames(context);
+    const unattributedMs = Math.max(LONG_FRAME_MS, Math.ceil(noise * FRAME_NOISE_FACTOR));
+    setUnattributedLimit(page, unattributedMs);
+    if (unattributedMs > LONG_FRAME_MS) notes.push(`this machine is slow (a blank page shows frames of ${Math.round(noise)} ms): frames with no application script count only above ${unattributedMs} ms`);
     const ctx = { page, context, pseudo, pixels, url, interact: Boolean(o.interact), loadOptions, notes };
     const devServer = await page.evaluate(devSignals);
     if (devServer.length) notes.push(`development build detected (${devServer.join(', ')}): long frames are reported as warnings; audit a production build (next start, vite preview) for them to count`);
@@ -110,7 +114,7 @@ export const audit = async (pageOrUrl, o = {}) => {
     };
 
     // Scroll the page end to end: entrances, long frames, content that stays invisible.
-    const scrollOnce = async () => { const r = await page.evaluate(scrollPass, SCROLL_OPTIONS); return { ...r, long: longFramesBetween(r.loaf, 0) }; };
+    const scrollOnce = async () => { const r = await page.evaluate(scrollPass, SCROLL_OPTIONS); return { ...r, long: longFramesBetween(r.loaf, 0, Infinity, unattributedLimit(page)) }; };
     let scroll = await scrollOnce();
     if (scroll.long.length) {
       const later = [];

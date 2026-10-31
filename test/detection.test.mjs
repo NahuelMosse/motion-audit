@@ -29,6 +29,8 @@ after(async () => {
 const calls = (name) => srv.stats.requests.filter((r) => r === `POST /api/${name}`).length;
 const kindsFor = (report, element) => report.findings.filter((f) => f.element.includes(element)).map((f) => `${f.level} ${f.kind}`).sort();
 
+// Not in the fixture matrix: the hover frame is far over 50 ms on any machine, but whether the press and
+// focus frames of such a large table pass 50 ms depends on the machine's speed, so only the hover is asserted.
 test('a hover that re-lays-out a large table is a long-frame error even though no script ran', async () => {
   const report = await audit(`${srv.url}/relayout-hover.html`, {});
   const long = report.findings.filter((f) => f.kind === 'long-frame' && /during hover/.test(f.detail));

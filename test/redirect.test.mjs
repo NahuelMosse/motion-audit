@@ -58,5 +58,5 @@ test('a URL with a hash is the same page: no redirect', async () => {
   const r = await run('/shadcn.html#docs');
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.report.coverage.audited, 3);
-  assert.deepEqual(r.report.notes, []);
+  assert.deepEqual(r.report.notes.filter((n) => /redirect/.test(n)), []);
 });
