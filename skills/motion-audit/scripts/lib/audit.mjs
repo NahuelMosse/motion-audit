@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, NOISY_UNATTRIBUTED_MS, RECOUNT_AFTER_MS, SCHEMA_VERSION,
+  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, NOISY_UNATTRIBUTED_MS, ENV_NOISE_MIN_ELEMENTS, RECOUNT_AFTER_MS, SCHEMA_VERSION,
   SCROLL_STEP_MS, SCROLL_STEP_PX, SCROLL_TAIL_MS, TOGGLE, VIEWPORT,
 } from './constants.mjs';
 import { UsageError } from './args.mjs';
@@ -247,6 +247,17 @@ export const audit = async (pageOrUrl, o = {}) => {
     const reduced = await reducedPass(ctx, targets);
     for (const el of elements) el.reduced = reduced.per.get(el.path);
 
+    // Frames no application script explains, in many unrelated controls, are the machine's: a page that janks does
+    // so in its own scripts and in the controls that run them. The calibration at the start cannot see a noisy
+    // phase that comes later.
+    const unattributed = (l) => !l.scripts?.length;
+    const noisy = elements.filter((e) => e.long.some(unattributed)).length;
+    if (noisy >= ENV_NOISE_MIN_ELEMENTS) {
+      const environmental = (l) => unattributed(l) && l.duration < NOISY_UNATTRIBUTED_MS;
+      for (const el of elements) el.long = el.long.filter((l) => !environmental(l));
+      scroll = { ...scroll, long: scroll.long.filter((l) => !environmental(l)) };
+      notes.push(`frames over ${LONG_FRAME_MS} ms with no script behind them showed up in ${noisy} unrelated controls: the machine drops frames, so those are not reported as long frames`);
+    }
     for (const el of elements) raw.push(...judgeElement(el, config));
     raw.push(...inconsistencies(elements, config));
     for (const el of elements) {

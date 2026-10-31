@@ -10,6 +10,8 @@ export const NOISY_UNATTRIBUTED_MS = 250;
 // A frame whose page scripts add up to less than this is judged as one without application work: the
 // rest of it belongs to the machine.
 export const PAGE_SCRIPT_MIN_MS = 25;
+// Frames without a script behind them in this many controls of one audit are the machine's, whatever its calibration.
+export const ENV_NOISE_MIN_ELEMENTS = 3;
 // A motion of at least SPARSE_MIN_MOTION_MS sampled at fewer than SPARSE_DENSITY samples per 60 Hz
 // frame is measured again (at most SPARSE_RETRIES times), keeping the densest recording.
 export const SPARSE_MIN_MOTION_MS = 100;

@@ -57,7 +57,7 @@ test('the JSON report carries the schema version, coverage, loafSupported and st
   const r = await run('shadcn.html');
   assert.equal(r.report.schemaVersion, 1);
   assert.equal(typeof r.report.loafSupported, 'boolean');
-  assert.deepEqual(Object.keys(r.report.coverage).sort(), ['audited', 'candidates', 'errored', 'late', 'max', 'skipped', 'toggles']);
+  assert.deepEqual(Object.keys(r.report.coverage).sort(), ['audited', 'candidates', 'errored', 'inconclusive', 'late', 'max', 'skipped', 'toggles']);
   assert.ok(r.report.findings.every((f) => new RegExp(`^${f.kind}:[0-9a-f]{10}$`).test(f.id)));
   const again = await run('shadcn.html');
   assert.deepEqual(again.report.findings.map((f) => f.id).sort(), r.report.findings.map((f) => f.id).sort());
