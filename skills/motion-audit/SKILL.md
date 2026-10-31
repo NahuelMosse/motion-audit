@@ -58,6 +58,7 @@ Levels are the defaults; the config file can change any of them.
 | `reduced-motion-hidden` | Content waits for an entrance that reduced motion skipped: it stays at opacity 0 | error | pixels |
 | `reduced-motion-missing` | Things move and no readable stylesheet has a reduced-motion rule (info when some sheets are unreadable) | warning | css |
 | `no-entrance` | A section below the fold appears without an entrance (opt-in with `--entrances`; never fails the run) | info | events |
+| `inconclusive` | The frames were too sparse to confirm or rule out a finding (its `check`, with the fingerprint of that finding): the reason gives the median and longest interval; never fails the run | warning | frames |
 | `click-target` | The `--click` selector matches nothing visible | error | pixels |
 
 `info` never fails a run. Missing `:active` or hover on links and inputs is never an error.
@@ -120,6 +121,9 @@ it only against a throwaway environment: a "Save" or "Delete" target is saved or
 - Inner scroll containers are scrolled and their controls audited; hidden-until-hover controls are found.
 - Flaky kinds (`long-frame`, `jump`, `interrupt-jump`, `not-interruptible`) are re-measured twice and kept
   only when two of three runs agree.
+- `inconclusive` rows appear when a machine drops so many frames that a check (`ease-in`, `interrupt-jump`,
+  `jump`) cannot be decided even after re-recording. They are listed with the findings, counted in
+  `coverage.inconclusive` and never fail the run. Rerun on a quieter machine, or without `--cpu` throttling.
 - `report.json` (printed with `--json`, `schemaVersion: 1`) has the coverage, `loafSupported`, every
   element's measurements, the findings with stable ids, baselined and suppressed findings.
 
@@ -202,7 +206,7 @@ Or the CLI: `npx motion-audit http://localhost:3000/orders --max 200 --min-cover
   is taken out of each frame, so a heavy page under heavy machine load can still show an unattributed one.
 - On a machine that drops frames (a loaded or virtualised runner), a teleport that lands in a frame of 66 ms or
   more is indistinguishable from a steep easing: the audit re-records the click while some steps are
-  undecidable, and can still miss it.
+  undecidable and, if it still cannot be decided, reports an `inconclusive` row.
 - Shadow DOM and iframes are not entered; canvas and WebGL motion is not measured.
 - Durations are compared within the same element kind (`button`, `a`, `tab`...): put deliberate
   differences in `tokens.durations` or ignore them with a reason.

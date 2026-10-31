@@ -2,12 +2,12 @@
 import { join } from 'node:path';
 import {
   CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, DENY_HREF, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
-  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
+  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, CLICK_UNSURE_MAX_DT_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
   REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
 import { createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced, unattributedLimit } from './browser.mjs';
-import { interruptionJumps } from './continuity.mjs';
+import { interruptionJumps, restartUnfollowed } from './continuity.mjs';
 import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
 import { analyzeRecording, animatedMove } from './series.mjs';
@@ -29,6 +29,12 @@ export const sparsity = (motion) => {
   const long = motion.flatMap((e) => e.moves).filter((m) => m.durationMs >= SPARSE_MIN_MOTION_MS && m.samples !== undefined);
   return long.length ? Math.max(...long.map((m) => m.samples / (m.durationMs / FRAME_MS))) : Infinity;
 };
+
+// Whether a recording is a better basis than `cur` to judge the curve: fewer ties that sparse samples cannot
+// break, then denser.
+const undecided = (motion) => motion.flatMap((e) => e.moves).filter((m) => m.easeInTie && m.samples / (m.durationMs / FRAME_MS) < SPARSE_DENSITY).length;
+const needsRetry = (motion) => sparsity(motion) < SPARSE_DENSITY || undecided(motion) > 0;
+const better = (next, cur) => (undecided(next.motion) !== undecided(cur.motion) ? undecided(next.motion) < undecided(cur.motion) : sparsity(next.motion) > sparsity(cur.motion));
 
 // A real press is released away from the control, which still makes the browser dispatch a click
 // on the common ancestor (the body) and start a native drag on links. Both are cancelled before
@@ -88,11 +94,11 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
     let hover = await hoverOnce();
     // A machine that renders few frames can sample a motion too coarsely to classify its curve: hover
     // again and keep the densest recording.
-    for (let again = 0; again < SPARSE_RETRIES && sparsity(hover.motion) < SPARSE_DENSITY; again++) {
+    for (let again = 0; again < SPARSE_RETRIES && needsRetry(hover.motion); again++) {
       await page.mouse.move(1, 1);
       await settle(proxy);
       const next = await hoverOnce();
-      if (sparsity(next.motion) > sparsity(hover.motion)) hover = next;
+      if (better(next, hover)) hover = next;
     }
     if (hoverOnly && (await stillTransparent(proxy))) return { skipped: 'hidden' };
     const hovered = await snapshot(proxy, VISIBLE_PROPS);
@@ -113,11 +119,11 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         let ids;
         const pressOnce = () => traced(page, proxy, async () => { ids = await pseudo.force(proxy, ['hover', 'active']); await settle(proxy); });
         press = await pressOnce();
-        for (let again = 0; again < SPARSE_RETRIES && sparsity(press.motion) < SPARSE_DENSITY; again++) {
+        for (let again = 0; again < SPARSE_RETRIES && needsRetry(press.motion); again++) {
           await pseudo.clear(ids);
           await settle(proxy);
           const next = await pressOnce();
-          if (sparsity(next.motion) > sparsity(press.motion)) press = next;
+          if (better(next, press)) press = next;
         }
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
@@ -131,17 +137,23 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
     // Interrupt: enter, leave half-way through the hover motion; a reversing transition stays continuous.
     const hoverMs = Math.max(...hover.motion.flatMap((e) => e.moves.map((m) => m.durationMs)), 0);
     if (hoverMs >= INTERRUPT_MIN_MOTION_MS) {
-      await proxy.evaluate((n) => window.__mt.begin('i', n));
-      const interruptFrom = await page.evaluate(() => window.__mt.now());
-      await wait(page, INTERRUPT_LEAD_MS);
-      await page.mouse.move(point.x, point.y);
-      await wait(page, Math.max(70, hoverMs / 2));
-      await page.evaluate(() => window.__mt.mark('i'));
-      await page.mouse.move(1, 1);
-      await settle(proxy);
-      const rec = await page.evaluate(() => window.__mt.end('i'));
-      const frames = longWindows(await page.evaluate(() => window.__mt.loaf), interruptFrom, unattributedLimit(page));
-      el.interrupt = rec?.marks.length ? interruptionJumps(rec, rec.marks[0], { durationMs: hoverMs, small: true, longFrames: frames }) : [];
+      // The hover is left mid-way and recorded again while an animation restart was seen that the sparse frames
+      // could not follow (at most INTERRUPT_RETRIES times).
+      for (let again = 0; again <= INTERRUPT_RETRIES; again++) {
+        await proxy.evaluate((n) => window.__mt.begin('i', n));
+        const interruptFrom = await page.evaluate(() => window.__mt.now());
+        await wait(page, INTERRUPT_LEAD_MS);
+        await page.mouse.move(point.x, point.y);
+        await wait(page, Math.max(70, hoverMs / 2));
+        await page.evaluate(() => window.__mt.mark('i'));
+        await page.mouse.move(1, 1);
+        await settle(proxy);
+        const rec = await page.evaluate(() => window.__mt.end('i'));
+        const frames = longWindows(await page.evaluate(() => window.__mt.loaf), interruptFrom, unattributedLimit(page));
+        el.interrupt = rec?.marks.length ? interruptionJumps(rec, rec.marks[0], { durationMs: hoverMs, small: true, longFrames: frames }) : [];
+        el.interruptUnsure = rec?.marks.length && !el.interrupt.length ? restartUnfollowed(rec, rec.marks[0]) : null;
+        if (!el.interruptUnsure) break;
+      }
     }
   }
 
@@ -287,6 +299,8 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
     return {
       moved,
       long: longFramesBetween(quiet.loaf, quiet.from, Infinity, unattributedLimit(page)),
+      // A step the frames were too sparse to judge, with no jump found in any recording: the check is undecided.
+      unsure: moved.flatMap((e) => e.moves).filter((m) => m.unresolved && m.cadence.max > CLICK_UNSURE_MAX_DT_MS).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null,
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
       interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from, unattributedLimit(page)) }) : [],

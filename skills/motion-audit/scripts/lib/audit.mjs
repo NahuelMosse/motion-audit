@@ -234,6 +234,7 @@ export const audit = async (pageOrUrl, o = {}) => {
         for (const name of holder.unconfirmed ?? []) r = { ...r, [name === 'jump' ? 'jumps' : name]: [] };
         click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, long: r.long, interrupt: r.interrupt };
         const label = `click ${o.click}`;
+        if (!r.jumps.length && r.unsure) raw.push({ kind: 'inconclusive', check: 'jump', element: label, key: 'click', detail: `a step in the transition could be a jump: frames too sparse: median Δt ${r.unsure.median} ms, max ${r.unsure.max} ms` });
         if (r.jumps.length) add('jump', label, `${r.jumps.slice(0, 4).map((j) => `${j.label} ${j.prop} jumps ${j.size} at ${j.atMs} ms`).join('; ')}${r.jumps.length > 4 ? ` (+${r.jumps.length - 4} more)` : ''}`, 'click');
         for (const l of r.layout) add('layout-animated', label, `${l.label} animates its ${l.prop === 'layoutWidth' ? 'width' : 'height'} over ${l.durationMs} ms`, `${l.label} ${l.prop}`);
         if (r.long.length) add('long-frame', label, `during the transition: ${describeLongFrames(r.long)}`, 'click');
@@ -265,6 +266,7 @@ export const audit = async (pageOrUrl, o = {}) => {
     }
 
     const done = finalize(raw, config, { devServer: devServer.length > 0 });
+    coverage.inconclusive = done.findings.filter((f) => f.kind === 'inconclusive').length;
     const baselined = done.findings.filter((f) => baseline.has(f.id));
     const findings = done.findings.filter((f) => !baseline.has(f.id));
     const report = {
@@ -309,5 +311,5 @@ export const exitCode = (report, { strict = false, minCoverage } = {}) => {
   const { candidates, audited } = report.coverage;
   if (audited === 0 || report.coverage.late > 0) return 2;
   if (minCoverage !== undefined && audited / candidates < minCoverage) return 2;
-  return report.findings.some((f) => f.level === 'error' || (strict && f.level === 'warning')) ? 1 : 0;
+  return report.findings.some((f) => f.kind !== 'inconclusive' && (f.level === 'error' || (strict && f.level === 'warning'))) ? 1 : 0;
 };

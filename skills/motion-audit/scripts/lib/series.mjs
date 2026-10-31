@@ -24,6 +24,8 @@ const SHAPES = [
 // are long, so the start and the end are searched inside them (FIT_GRID steps each) rather than taken at the
 // sample times, which would read a late-starting or late-seen ease-in as an ease-in-out.
 const FIT_GRID = 6;
+const EASE_IN_TIE_RATIO = 1.5;
+const EASE_IN_TIE_ERROR = 0.02;
 const bestShape = (t, v, start, settle) => {
   const v0 = v[start - 1];
   const span = v[settle] - v0;
@@ -39,7 +41,11 @@ const bestShape = (t, v, start, settle) => {
       }
     }
   }
-  return [...best.entries()].sort((x, y) => x[1] - y[1])[0][0];
+  const [[shape, least]] = [...best.entries()].sort((x, y) => x[1] - y[1]);
+  // Sparse samples cannot always tell an ease-in from the other curves: it is a tie when the best ease-in fit
+  // is nearly as good as the winner.
+  const easeIn = best.get('ease-in');
+  return { shape, easeInTie: shape !== 'ease-in' && easeIn <= Math.max(EASE_IN_TIE_RATIO * least, least + EASE_IN_TIE_ERROR) };
 };
 
 // Angles read from a matrix wrap at +-180 degrees: unwrap so a spinning element is a smooth series.
@@ -112,6 +118,12 @@ const cutJumps = (t, v, cuts, eps, range, t0) => cuts.flatMap((c) => {
 });
 
 // One property over time (`t` ms, `v` values): duration, overshoot, curve shape and jumps.
+// Median and longest interval (ms) between samples.
+const cadenceOf = (t) => {
+  const dts = t.slice(1).map((x, i) => x - t[i]);
+  return { median: round(median(dts), 0), max: round(Math.max(0, ...dts), 0) };
+};
+
 export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
   const n = v.length;
   if (n < 4) return null;
@@ -134,11 +146,12 @@ export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
   if (!returns && settled) for (let j = start; j < n; j++) over = Math.max(over, (v[j] - final) * dir);
   const overshootPct = round((over / amp) * 100);
   let shape;
+  let easeInTie = false;
   if (returns) shape = 'round-trip';
   else if (settle - start < 2) shape = 'step';
   else if (overshootPct > OVERSHOOT_SPRING_PCT) shape = 'spring';
   else {
-    shape = bestShape(t, v, start, settle);
+    ({ shape, easeInTie } = bestShape(t, v, start, settle));
   }
   let jumps;
   let unresolved = 0;
@@ -159,7 +172,7 @@ export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
       return !longFrames.some(([s, len]) => s <= to + LONG_FRAME_STEP_SLACK_MS && s + len >= from - LONG_FRAME_STEP_SLACK_MS);
     });
   }
-  return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, firstT: t[start], durationMs: round(t[settle] - t0, 0), samples: settle - start + 1, overshootPct, shape, settled, jumps, unresolved };
+  return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, firstT: t[start], durationMs: round(t[settle] - t0, 0), samples: settle - start + 1, easeInTie, cadence: cadenceOf(t.slice(start - 1, settle + 1)), overshootPct, shape, settled, jumps, unresolved };
 };
 
 // Whether a move is an animation: seen in more than one frame and longer than two 60 Hz frames. A change seen in a

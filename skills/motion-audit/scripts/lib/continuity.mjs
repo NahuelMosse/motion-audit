@@ -63,3 +63,13 @@ export const interruptionJumps = (rec, markT, { durationMs, small = false, longF
   }
   return found.sort((a, b) => b.delta - a.delta);
 };
+
+// An animation restart was seen after the mark but the samples around it are too far apart to follow the
+// value: { median, max } of the intervals there, or null when nothing restarted or the frames were fine.
+export const restartUnfollowed = (rec, markT) => {
+  if (!(rec.anims ?? []).some((a) => isRestart(a) && a.t >= markT - RESTART_EVENT_SLACK_MS)) return null;
+  const dts = rec.elems.flatMap((el) => (el.r ?? el.t).slice(1).map((x, k) => [x, x - (el.r ?? el.t)[k]]).filter(([x]) => Math.abs(x - markT) <= 300).map(([, d]) => d));
+  if (!dts.length) return null;
+  const max = Math.max(...dts);
+  return max > JUMP_MAX_DT_MS ? { median: round(median(dts), 0), max: round(max, 0) } : null;
+};

@@ -54,3 +54,28 @@ test('every kind the judge can emit is in the registry', () => {
   const el = element({ moments: { hover: moment(), press: moment(), focus: moment() }, interrupt: [{ label: 'x', prop: 'ty' }], reduced: { moves: 'translate 10 px', residue: 'translate 4 px' } });
   for (const f of judgeElement(el)) assert.ok(KINDS[f.kind], f.kind);
 });
+
+test('a sparse recording that cannot be told from an ease-in is inconclusive, with the fingerprint of the ease-in it could not decide', async () => {
+  const { analyzeSeries } = await import('../skills/motion-audit/scripts/lib/series.mjs');
+  const { fingerprint } = await import('../skills/motion-audit/scripts/lib/config.mjs');
+  const { exitCode } = await import('../skills/motion-audit/scripts/lib/audit.mjs');
+  // Six samples over 400 ms of a CSS ease-in sampled by a machine that drops frames: a line fits it as well.
+  const t = [0, 33, 83, 150, 167, 267, 400, 483, 500, 533, 567, 650, 667, 700, 750, 783, 817];
+  const v = [0, 0, 0, 0, 0.3, 12.3, 45.9, 74, 80.1, 93.1, 100, 100, 100, 100, 100, 100, 100];
+  const move = { prop: 'translateY', ...analyzeSeries(t, v, 1) };
+  assert.equal(move.easeInTie, true, `shape ${move.shape}`);
+  const el = element({ label: 'button.js', moments: { hover: moment({ changed: ['transform'], motion: [{ label: 'button.js', moves: [move] }] }) } });
+  const raw = judgeElement(el);
+  const row = raw.find((f) => f.kind === 'inconclusive');
+  assert.ok(row, 'an inconclusive row, not nothing');
+  assert.equal(row.check, 'ease-in');
+  assert.match(row.detail, /frames too sparse: median .t \d+ ms, max \d+ ms/);
+  const { findings } = finalize(raw, validateConfig({}));
+  const inconclusive = findings.find((f) => f.kind === 'inconclusive');
+  assert.equal(inconclusive.level, 'warning');
+  assert.equal(inconclusive.id.split(':')[1], fingerprint({ kind: 'ease-in', element: el.label, key: 'measured button.js' }).split(':')[1]);
+  assert.equal(exitCode({ coverage: { candidates: 1, audited: 1 }, findings: [inconclusive] }, { strict: true }), 0);
+  // The same check that found the ease-in settles it: no row is left behind.
+  const decided = finalize([...raw, { kind: 'ease-in', element: el.label, key: 'measured button.js', detail: 'x' }], validateConfig({})).findings;
+  assert.ok(decided.some((f) => f.kind === 'ease-in') && !decided.some((f) => f.kind === 'inconclusive'));
+});

@@ -13,7 +13,8 @@ export class ConfigError extends Error {}
 
 // Fingerprint of a finding: stable across runs because it uses the element's label and the
 // moment/property that identifies the finding, never DOM indices or measured numbers.
-export const fingerprint = (f) => `${f.kind}:${createHash('sha1').update(`${f.kind}\n${f.element}\n${f.key ?? ''}`).digest('hex').slice(0, 10)}`;
+// An `inconclusive` row carries the `check` it could not decide and the hash of that check's own finding.
+export const fingerprint = (f) => `${f.kind}:${createHash('sha1').update(`${f.check ?? f.kind}\n${f.element}\n${f.key ?? ''}`).digest('hex').slice(0, 10)}`;
 
 const ID_PATTERN = /^([a-z-]+):[0-9a-f]{10}$/;
 const hasReason = (x) => typeof x?.reason === 'string' && x.reason.trim().length > 0;
@@ -79,7 +80,10 @@ export const finalize = (raw, config, { devServer = false } = {}) => {
   const findings = [];
   const suppressed = [];
   const seen = new Set();
+  // What an inconclusive row could not decide is settled when the check found something.
+  const found = new Set(raw.filter((f) => f.kind !== 'inconclusive').map((f) => fingerprint(f).split(':')[1] + f.kind));
   for (const f of raw) {
+    if (f.kind === 'inconclusive' && found.has(fingerprint(f).split(':')[1] + f.check)) continue;
     // One finding per fingerprint: several series can describe the same thing (two nodes of one component).
     const id = fingerprint(f);
     if (seen.has(id)) continue;
@@ -88,7 +92,7 @@ export const finalize = (raw, config, { devServer = false } = {}) => {
     if (f.kind === 'long-frame' && devServer) level = 'warning';
     level = config.severity[f.kind] ?? level;
     if (level === 'off') continue;
-    const full = { id, level, kind: f.kind, element: f.element, detail: f.detail };
+    const full = { id, level, kind: f.kind, ...(f.check ? { check: f.check } : {}), element: f.element, detail: f.detail };
     const rule = config.ignore.find((r) => ignoreMatches(r, full));
     if (rule) suppressed.push({ ...full, reason: rule.reason });
     else findings.push(full);

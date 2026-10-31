@@ -14,7 +14,12 @@ export const PAGE_SCRIPT_MIN_MS = 25;
 // frame is measured again (at most SPARSE_RETRIES times), keeping the densest recording.
 export const SPARSE_MIN_MOTION_MS = 100;
 export const SPARSE_DENSITY = 0.7;
-export const SPARSE_RETRIES = 2;
+export const SPARSE_RETRIES = 3;
+// A hover left mid-way is recorded again (at most this many times) while an animation restart was seen
+// but the value could not be followed because the frames were sparse.
+export const INTERRUPT_RETRIES = 3;
+// A step in intervals this long cannot be told from a steep easing: a click's jump check is inconclusive.
+export const CLICK_UNSURE_MAX_DT_MS = 4 * FRAME_MS;
 export const CALIBRATION_CYCLES = 6;
 export const IDLE_NOISE_MS = 1000;
 export const MIN_PLAYWRIGHT = [1, 43];

@@ -1,5 +1,5 @@
 // Turns what was measured on one element into findings. Pure: no browser, no config file.
-import { BANDS, EASE_IN_MIN_MS, INCONSISTENT_MIN_GAP_MS, INCONSISTENT_RATIO, LAYOUT_PROPS } from './constants.mjs';
+import { BANDS, EASE_IN_MIN_MS, FRAME_MS, INCONSISTENT_MIN_GAP_MS, INCONSISTENT_RATIO, LAYOUT_PROPS, SPARSE_DENSITY } from './constants.mjs';
 import { animatedMove, easingKind } from './series.mjs';
 
 // The declared duration and easing of the transition that animates `prop`, or null if none does.
@@ -22,11 +22,13 @@ export const judgeElement = (el, policy = {}) => {
   const bands = { ...BANDS, ...policy.bands };
   const out = [];
   const seen = new Set();
-  const add = (kind, detail, key, level) => {
+  const add = (kind, detail, key, level, extra) => {
     if (seen.has(`${kind}|${key}`)) return;
     seen.add(`${kind}|${key}`);
-    out.push({ kind, element: el.label, detail, key, ...(level ? { level } : {}) });
+    out.push({ kind, element: el.label, detail, key, ...(level ? { level } : {}), ...extra });
   };
+  // A check the frames were too sparse to decide: same fingerprint as the finding it could not confirm or rule out.
+  const unsure = (check, detail, key, cadence) => add('inconclusive', `${detail}: frames too sparse: median Δt ${cadence.median} ms, max ${cadence.max} ms`, `${check} ${key}`, undefined, { check, key });
   for (const [moment, d] of Object.entries(el.moments)) {
     if (!d) continue;
     const tr = d.transition ?? el.transition;
@@ -59,6 +61,7 @@ export const judgeElement = (el, policy = {}) => {
       }
     }
     for (const e of d.motion) for (const m of e.moves) {
+      if (m.easeInTie && m.durationMs > EASE_IN_MIN_MS && m.samples / (m.durationMs / FRAME_MS) < SPARSE_DENSITY) unsure('ease-in', `${moment}: ${e.label} ${m.prop} may ease in`, `measured ${e.label}`, m.cadence);
       if (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) add('ease-in', `${moment}: ${e.label} ${m.prop} measured ease-in over ${m.durationMs} ms`, `measured ${e.label}`);
       for (const j of m.jumps) add('jump', `${moment}: ${e.label} ${m.prop} jumps ${j.size} at ${j.atMs} ms`, `${moment} ${e.label} ${m.prop}`);
     }
@@ -70,6 +73,7 @@ export const judgeElement = (el, policy = {}) => {
       break;
     }
   }
+  if (el.interruptUnsure && !el.interrupt?.length) unsure('interrupt-jump', 'hover left mid-way: the animation restarted but the value cannot be followed', 'hover', el.interruptUnsure);
   if (el.interrupt?.length) add('interrupt-jump', `hover left mid-way: ${el.interrupt.map((j) => `${j.label} ${j.prop}`).join(', ')} jump instead of reversing`, 'hover');
   if (el.reduced?.moves) add('reduced-motion-moves', `with prefers-reduced-motion it still moves (${el.reduced.moves})`, 'press');
   if (el.reduced?.residue) add('reduced-motion-residue', `with prefers-reduced-motion a transform stays after release (${el.reduced.residue})`, 'press');

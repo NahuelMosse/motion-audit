@@ -17,6 +17,7 @@ const summary = (r) => {
   const skipped = Object.entries(c.skipped).map(([reason, s]) => `${s.count} ${reason}`);
   const lines = [`audited ${c.audited} of ${c.candidates} controls${skipped.length ? ` (not audited: ${skipped.join(', ')})` : ''} · mode ${r.mode}`];
   lines.push(`respond on hover ${n('hover')} · press ${n('press')} · focus ${n('focus')} · sections with entrance ${r.sections.filter((s) => s.animated).length}/${r.sections.length}${r.loafSupported ? '' : ' · long frames: not supported by this browser'}${r.cssUnreadable ? ` · ${r.cssUnreadable} stylesheets not read` : ''}`);
+  if (c.inconclusive) lines.push(`inconclusive: ${c.inconclusive} check(s) could not be decided because frames were too sparse; rerun on a quieter machine, without --cpu`);
   const t = c.toggles;
   const togglesSkipped = Object.entries(t.skipped).filter(([, v]) => v > 0);
   lines.push(`toggles: ${t.probed} probed of ${t.candidates}${togglesSkipped.length ? ` (not probed: ${togglesSkipped.map(([k, v]) => `${v} ${k}`).join(', ')})` : ''}`);
@@ -27,12 +28,12 @@ const summary = (r) => {
 
 const printText = (r, code, opts) => {
   for (const line of summary(r)) console.log(line);
-  for (const f of r.findings) console.log(`${f.level.padEnd(7)} ${f.kind}: ${f.element}: ${f.detail} [${f.id}]`);
+  for (const f of r.findings) console.log(`${f.level.padEnd(7)} ${f.kind}${f.check ? ` (${f.check})` : ''}: ${f.element}: ${f.detail} [${f.id}]`);
   if (r.baselined.length) console.log(`${r.baselined.length} finding(s) already in the baseline`);
   for (const s of r.suppressed) console.log(`suppressed ${s.kind}: ${s.element} [${s.id}]: ${s.reason}`);
   if (r.sheets.length) console.log(`contact sheets: ${r.sheets.join(', ')}`);
   console.log(`report: ${join(r.out, 'report.json')}`);
-  const failing = r.findings.filter((f) => f.level === 'error' || (opts.strict && f.level === 'warning'));
+  const failing = r.findings.filter((f) => f.kind !== 'inconclusive' && (f.level === 'error' || (opts.strict && f.level === 'warning')));
   if (r.coverage.audited === 0) console.log('NOT AUDITED: no control was audited, so there is no result (exit 2)');
   else if (r.coverage.late > 0) console.log(`INCOMPLETE: ${r.coverage.late} controls appeared after the audit started, so they were not audited; re-run with --wait-for <selector> (exit 2)`);
   else if (code === 2) console.log(`coverage ${r.coverage.audited}/${r.coverage.candidates} is below --min-coverage ${opts.minCoverage} (exit 2)`);

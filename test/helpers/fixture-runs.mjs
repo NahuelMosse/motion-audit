@@ -4,8 +4,8 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CLI_MATRIX } from '../fixture-matrix.mjs';
-import { FIXTURES, idsOf, kindsOf, removeScratch, runCli } from './cli.mjs';
-import { GOLDEN_PATH, signature } from './golden.mjs';
+import { FIXTURES, kindsOf, removeScratch, runCli } from './cli.mjs';
+import { GOLDEN_PATH, againstGolden, signature } from './golden.mjs';
 import { inShard } from './shard.mjs';
 import { serve } from './serve.mjs';
 
@@ -21,8 +21,9 @@ export const runMatrix = async ({ runs = 3, filter = '', log = console.log } = {
         const started = Date.now();
         const r = await runCli([`${srv.url}/${entry.fixture}`, ...entry.args, '--json']);
         const seconds = Math.round((Date.now() - started) / 1000);
-        const sig = r.report ? idsOf(r.report).join(',') : `no-report:${r.stderr.slice(0, 80)}`;
-        const matchesGolden = Boolean(r.report) && JSON.stringify(signature(r.report)) === JSON.stringify(golden[entry.name].findings) && r.code === golden[entry.name].exit;
+        const got = r.report ? againstGolden(signature(r.report), golden[entry.name].findings, golden[entry.name].exit) : null;
+        const sig = got ? got.findings.join(',') : `no-report:${r.stderr.slice(0, 80)}`;
+        const matchesGolden = Boolean(got) && JSON.stringify(got.findings) === JSON.stringify(golden[entry.name].findings) && r.code === got.exit;
         seen.push({ code: r.code, sig, seconds, matchesGolden, kinds: r.report ? kindsOf(r.report) : [] });
       }
       const stable = seen.every((s) => s.sig === seen[0].sig && s.code === seen[0].code);

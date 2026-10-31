@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import { audit, exitCode } from '../skills/motion-audit/scripts/lib/index.mjs';
 import { CLI_MATRIX } from './fixture-matrix.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
-import { GOLDEN_PATH, signature } from './helpers/golden.mjs';
+import { GOLDEN_PATH, againstGolden, signature } from './helpers/golden.mjs';
 import { serve } from './helpers/serve.mjs';
 
 let srv;
@@ -38,8 +38,9 @@ for (const [position, entry] of CLI_MATRIX.entries()) {
   test(`fixture ${entry.name} yields exactly the expected findings and exit code`, { skip }, async () => {
     const r = await runCli([`${srv.url}/${entry.fixture}`, ...entry.args, '--json']);
     assert.ok(r.report, r.stderr);
-    assert.deepEqual(signature(r.report), golden[entry.name].findings);
-    assert.equal(r.code, golden[entry.name].exit);
+    const got = againstGolden(signature(r.report), golden[entry.name].findings, golden[entry.name].exit);
+    assert.deepEqual(got.findings, golden[entry.name].findings);
+    assert.equal(r.code, got.exit);
   });
 }
 

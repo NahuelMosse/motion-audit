@@ -26,6 +26,7 @@ export const KINDS = {
   'reduced-motion-hidden': { level: 'error', source: 'pixels', user: 'Content waits for an entrance that reduced motion skipped: it stays at opacity 0' },
   'reduced-motion-missing': { level: 'warning', source: 'css', user: 'Things move and no readable stylesheet has a reduced-motion rule (info when some sheets are unreadable)' },
   'no-entrance': { level: 'info', source: 'events', user: 'A section below the fold appears without an entrance (opt-in with --entrances; never fails the run)' },
+  inconclusive: { level: 'warning', source: 'frames', user: 'The frames were too sparse to confirm or rule out a finding (its `check`): rerun on a quieter machine, without --cpu; never fails the run' },
   'click-target': { level: 'error', source: 'pixels', user: 'The --click selector matches nothing visible' },
 };
 
