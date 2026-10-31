@@ -91,3 +91,26 @@ test('an inconclusive row from a 60 Hz recording is a failure; from a sparse one
   assert.equal(denseInconclusive({ findings: [row('button "Go"')], elements: [moves(at(17, 70))] }).length, 0);
   assert.equal(denseInconclusive({ findings: [{ kind: 'jump', element: 'click #go' }], click: { cadence: at(17, 17) }, elements: [] }).length, 0);
 });
+
+// A jump seen in one click recording and not in the re-measures: what it becomes depends on how well each recording could judge.
+test('an unconfirmed jump: dropped when a decidable re-measure ruled it out in a sparse sighting, otherwise inconclusive', async () => {
+  const { unconfirmedVerdict, decidable, sightedDense } = await import('../skills/motion-audit/scripts/lib/probes.mjs');
+  const move = (cadenceMax, extra = {}) => ({ prop: 'translateX', cadence: { median: 17, max: cadenceMax }, jumps: [], unresolved: 0, ...extra });
+  const moved = (m) => [{ label: 'div', moves: [m] }];
+  const none = (decidableRerun) => ({ jumps: [], decidable: decidableRerun });
+  const sparseSighting = { sightedDense: false };
+  const denseSighting = { sightedDense: true };
+  // 1. sparse sighting, one decidable re-measure without the jump: a decided negative, no row
+  assert.equal(unconfirmedVerdict(sparseSighting, [none(false), none(true)]), 'drop');
+  // 2. sparse sighting, every re-measure undecidable: undecided
+  assert.equal(unconfirmedVerdict(sparseSighting, [none(false), none(false)]), 'inconclusive');
+  // 3. clear sighting in dense frames that the re-measures do not reproduce: a flake, undecided
+  assert.equal(unconfirmedVerdict(denseSighting, [none(true), none(true)]), 'inconclusive');
+  // the predicates behind it
+  assert.equal(decidable(moved(move(17))), true);
+  assert.equal(decidable(moved(move(17, { unresolved: 1 }))), false);
+  assert.equal(decidable(moved(move(110))), false);
+  assert.equal(sightedDense(moved(move(20, { jumps: [{ atMs: 1, size: 1 }] }))), true);
+  assert.equal(sightedDense(moved(move(70, { jumps: [{ atMs: 1, size: 1 }] }))), false);
+  assert.equal(sightedDense(moved(move(20))), false);
+});

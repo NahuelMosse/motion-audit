@@ -14,7 +14,7 @@ import { inconsistencies, judgeElement } from './judge.mjs';
 import { devSignals, cssPath, describeElement, hasReducedMotionRule, invisibleContent, reachability, scrollPass, ungatedHoverMotion } from './page-scripts.mjs';
 import { tracer } from './page-tracer.mjs';
 import { loadPlaywright } from './playwright.mjs';
-import { auditElement, clickMeasurer, contactSheet, eligibleToggles, probeToggle, reducedPass } from './probes.mjs';
+import { auditElement, clickMeasurer, unconfirmedVerdict, contactSheet, eligibleToggles, probeToggle, reducedPass } from './probes.mjs';
 
 const SCROLL_OPTIONS = { step: SCROLL_STEP_PX, stepMs: SCROLL_STEP_MS, tail: SCROLL_TAIL_MS, maxScrollers: 5 };
 const MAX_SKIP_EXAMPLES = 3;
@@ -233,15 +233,18 @@ export const audit = async (pageOrUrl, o = {}) => {
       if (r.missing) add('click-target', o.click, `${o.click} ${r.missing}`, 'target');
       else {
         const holder = { long: r.long, jumps: r.jumps, interrupt: r.interrupt };
+        const reruns = [];
         await confirm(holder, { long: (x) => x.long.length > 0, jump: (x) => x.jumps.length > 0, interrupt: (x) => x.interrupt.length > 0 }, async () => {
           const again = await measure(0);
+          if (!again.missing) reruns.push(again);
           return again.missing ? null : again;
         });
-        const unconfirmedJump = r.jumps.length > 0 && (holder.unconfirmed ?? []).includes('jump');
+        const unconfirmedJump = r.jumps.length > 0 && (holder.unconfirmed ?? []).includes('jump') && unconfirmedVerdict(r, reruns) === 'inconclusive';
         for (const name of holder.unconfirmed ?? []) r = { ...r, [name === 'jump' ? 'jumps' : name]: [] };
         click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, cadence: r.cadence, long: r.long, interrupt: r.interrupt };
         const label = `click ${o.click}`;
-        // A jump seen in one recording and not in the re-measures is neither reported nor ruled out: it stays visible as undecided.
+        // A jump seen in one recording that no decidable re-measure rules out (or that was a clear step in dense frames and
+        // is not reproduced) is neither reported nor dropped: it stays visible as undecided.
         if (!r.jumps.length && (r.unsure || unconfirmedJump)) {
           const c = r.unsure ?? r.cadence ?? { median: '?', max: '?' };
           raw.push({ kind: 'inconclusive', check: 'jump', element: label, key: 'click', detail: `${unconfirmedJump && !r.unsure ? 'a jump was seen in one recording and not in the re-measures' : 'a step in the transition could be a jump'}: frames too sparse: median Δt ${c.median} ms, max ${c.max} ms` });

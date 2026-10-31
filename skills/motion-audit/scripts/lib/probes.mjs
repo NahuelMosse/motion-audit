@@ -2,7 +2,7 @@
 import { join } from 'node:path';
 import {
   CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, PRESS_GUARD_MS, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
-  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, CLICK_UNSURE_MAX_DT_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
+  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, CLICK_UNSURE_MAX_DT_MS, SERIES_DENSE_MAX_DT_MS, SERIES_JUMP_MAX_DT_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
   REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
@@ -287,6 +287,24 @@ export const recordingCadence = (rec) => {
   return dts.length ? { median: Math.round(median(dts)), max: Math.round(Math.max(...dts)) } : null;
 };
 
+// Whether a recording could judge the jump of every motion in it: no step left unresolved and no interval over the
+// limit within which a velocity is bounded.
+export const decidable = (moved) => moved.every((e) => e.moves.every((m) => !m.unresolved && m.cadence.max <= SERIES_JUMP_MAX_DT_MS));
+
+// Whether every motion that showed a jump was sampled frame by frame (no interval over two 60 Hz frames): a clear jump.
+export const sightedDense = (moved) => {
+  const seen = moved.flatMap((e) => e.moves).filter((m) => m.jumps.length);
+  return seen.length > 0 && seen.every((m) => m.cadence.max <= SERIES_DENSE_MAX_DT_MS);
+};
+
+// What a jump seen in one recording and not confirmed by the re-measures becomes. A re-measure that did not see it
+// and could judge the motion is a decided negative: a sighting in sparse frames is then dropped. A clear sighting in
+// dense frames that is not reproduced stays undecided (a flake), and so does one whose re-measures could not judge.
+export const unconfirmedVerdict = (first, reruns) => {
+  if (first.sightedDense) return 'inconclusive';
+  return reruns.some((r) => !r.jumps.length && r.decidable) ? 'drop' : 'inconclusive';
+};
+
 export const clickMeasurer = (ctx, selector, interrupt) => {
   const { page, url } = ctx;
   const attempt = async (trace) => {
@@ -336,6 +354,8 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       // A step the frames were too sparse to judge, with no jump found in any recording: the check is undecided.
       unsure: clickUnsure(moved, rec),
       cadence: recordingCadence(rec),
+      decidable: decidable(moved),
+      sightedDense: sightedDense(moved),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
       interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from, unattributedLimit(page)) }) : [],
