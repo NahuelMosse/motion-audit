@@ -1,6 +1,6 @@
 // Helpers that drive the page: tracing a gesture, snapshots, forced pseudo-states over CDP,
 // navigation with redirect checks.
-import { CALIBRATION_CYCLES, CLIP_MARGIN_PX, IDLE_NOISE_MS, VIEWPORT, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, RELOAD_WAIT_MS, SETTLE_MAX_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
+import { CALIBRATION_CYCLES, CLIP_MARGIN_PX, IDLE_NOISE_MS, VIEWPORT, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PAGE_SCRIPT_MIN_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, RELOAD_WAIT_MS, SETTLE_MAX_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
 import { COLS, analyzeRecording } from './series.mjs';
 
 export class AuditError extends Error {}
@@ -73,8 +73,9 @@ const auditWork = (scripts) => scripts.filter((s) => !s.url).reduce((sum, s) => 
 
 // Long frames (over LONG_FRAME_MS) in [from, to] that are the page's: what is left of a frame once
 // the audit's own script time is taken out. Frames with no script at all (style, layout, paint) count
-// when they are over `unattributedMs`.
-const pageOwned = (d, scripts, unattributedMs) => d - auditWork(scripts) > (scripts.some((x) => x.url) ? LONG_FRAME_MS : unattributedMs);
+// when they are over `unattributedMs`, and so do frames whose page scripts are short (PAGE_SCRIPT_MIN_MS).
+const pageScripts = (scripts) => scripts.filter((x) => x.url).reduce((sum, x) => sum + x.duration, 0);
+const pageOwned = (d, scripts, unattributedMs) => d - auditWork(scripts) > (pageScripts(scripts) >= PAGE_SCRIPT_MIN_MS ? LONG_FRAME_MS : unattributedMs);
 export const longFramesBetween = (loaf, from, to = Infinity, unattributedMs = LONG_FRAME_MS) => loaf
   .filter(([s, d, scripts]) => s + d >= from && s <= to && pageOwned(d, scripts ?? [], unattributedMs))
   .map(([, d, scripts]) => ({ duration: Math.round(d), scripts: (scripts ?? []).filter((x) => x.url) }));

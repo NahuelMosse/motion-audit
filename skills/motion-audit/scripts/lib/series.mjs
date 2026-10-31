@@ -19,6 +19,29 @@ const SHAPES = [
   ['ease-in-out', (u) => (u < 0.5 ? 2 * u * u : 1 - 2 * (1 - u) ** 2)], ['ease-in-out', (u) => (u < 0.5 ? 4 * u ** 3 : 1 - 4 * (1 - u) ** 3)],
 ];
 
+// The curve family that fits a settled motion best. The animation began somewhere after the last unmoved
+// sample and ended somewhere before the first settled one: on a machine that drops frames those intervals
+// are long, so the start and the end are searched inside them (FIT_GRID steps each) rather than taken at the
+// sample times, which would read a late-starting or late-seen ease-in as an ease-in-out.
+const FIT_GRID = 6;
+const bestShape = (t, v, start, settle) => {
+  const v0 = v[start - 1];
+  const span = v[settle] - v0;
+  const best = new Map();
+  for (let a = 0; a < FIT_GRID; a++) {
+    const ts = t[start - 1] + ((t[start] - t[start - 1]) * a) / FIT_GRID;
+    for (let b = 1; b <= FIT_GRID; b++) {
+      const te = t[settle - 1] + ((t[settle] - t[settle - 1]) * b) / FIT_GRID;
+      for (const [name, f] of SHAPES) {
+        let err = 0;
+        for (let j = start - 1; j <= settle; j++) err += ((v[j] - v0) / span - f(Math.min(1, Math.max(0, (t[j] - ts) / (te - ts))))) ** 2;
+        if (err < (best.get(name) ?? Infinity)) best.set(name, err);
+      }
+    }
+  }
+  return [...best.entries()].sort((x, y) => x[1] - y[1])[0][0];
+};
+
 // Angles read from a matrix wrap at +-180 degrees: unwrap so a spinning element is a smooth series.
 export const unwrap = (v) => v.reduce((out, x, i) => {
   if (!i) return [x];
@@ -115,13 +138,7 @@ export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
   else if (settle - start < 2) shape = 'step';
   else if (overshootPct > OVERSHOOT_SPRING_PCT) shape = 'spring';
   else {
-    const best = new Map();
-    for (const [name, f] of SHAPES) {
-      let err = 0;
-      for (let j = start - 1; j <= settle; j++) err += ((v[j] - v[start - 1]) / (final - v[start - 1]) - f((t[j] - t0) / (t[settle] - t0))) ** 2;
-      best.set(name, Math.min(best.get(name) ?? Infinity, err));
-    }
-    shape = [...best.entries()].sort((a, b) => a[1] - b[1])[0][0];
+    shape = bestShape(t, v, start, settle);
   }
   let jumps;
   let unresolved = 0;

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, RECOUNT_AFTER_MS, SCHEMA_VERSION,
+  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, NOISY_UNATTRIBUTED_MS, RECOUNT_AFTER_MS, SCHEMA_VERSION,
   SCROLL_STEP_MS, SCROLL_STEP_PX, SCROLL_TAIL_MS, TOGGLE, VIEWPORT,
 } from './constants.mjs';
 import { UsageError } from './args.mjs';
@@ -97,7 +97,7 @@ export const audit = async (pageOrUrl, o = {}) => {
     const pseudo = await createPseudoStates(context, page);
     pixels = await createPixelComparer(context);
     const noise = Math.max(await calibrateFrames(context), await idleFrameNoise(page));
-    const unattributedMs = Math.max(LONG_FRAME_MS, Math.ceil(noise * FRAME_NOISE_FACTOR));
+    const unattributedMs = Math.max(noise >= LONG_FRAME_MS ? NOISY_UNATTRIBUTED_MS : LONG_FRAME_MS, Math.ceil(noise * FRAME_NOISE_FACTOR));
     setUnattributedLimit(page, unattributedMs);
     if (unattributedMs > LONG_FRAME_MS) notes.push(`this machine or page is noisy (frames of ${Math.round(noise)} ms with nothing happening): frames with no application script count only above ${unattributedMs} ms`);
     const ctx = { page, context, pseudo, pixels, url, interact: Boolean(o.interact), loadOptions, notes };

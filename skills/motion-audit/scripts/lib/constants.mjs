@@ -4,6 +4,12 @@ export const LONG_FRAME_MS = 50;
 // A frame with no application script behind it counts above LONG_FRAME_MS, or above this multiple of the
 // longest frame a blank page shows on the same machine (a slow VM has long frames with nothing to do).
 export const FRAME_NOISE_FACTOR = 2;
+// Where a machine shows frames over LONG_FRAME_MS with nothing to do, its noise comes in bursts a short
+// calibration can miss: a frame without application work counts only above this many ms at least.
+export const NOISY_UNATTRIBUTED_MS = 250;
+// A frame whose page scripts add up to less than this is judged as one without application work: the
+// rest of it belongs to the machine.
+export const PAGE_SCRIPT_MIN_MS = 25;
 // A motion of at least SPARSE_MIN_MOTION_MS sampled at fewer than SPARSE_DENSITY samples per 60 Hz
 // frame is measured again (at most SPARSE_RETRIES times), keeping the densest recording.
 export const SPARSE_MIN_MOTION_MS = 100;
