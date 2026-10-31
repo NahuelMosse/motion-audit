@@ -1,6 +1,6 @@
 // Helpers that drive the page: tracing a gesture, snapshots, forced pseudo-states over CDP,
 // navigation with redirect checks.
-import { CLIP_MARGIN_PX, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
+import { CLIP_MARGIN_PX, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, RELOAD_WAIT_MS, SETTLE_MAX_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
 import { COLS, analyzeRecording } from './series.mjs';
 
 export class AuditError extends Error {}
@@ -82,6 +82,8 @@ const sameDocument = (a, b) => {
 };
 export const sameLocation = sameDocument;
 
+const loadedUrls = new WeakMap();
+
 // Loads `url` fresh (never reload: a probe may have navigated) and checks where it landed: after
 // the load, after --wait-for and after the hydration wait, because a session check or a router
 // redirects from script, after the response.
@@ -105,7 +107,17 @@ export const load = async (page, url, { waitFor, allowRedirect = false } = {}) =
       throw new AuditError(`--wait-for "${waitFor}" did not appear within ${WAIT_FOR_TIMEOUT_MS / 1000} s on ${page.url()}: ${e.message.split('\n')[0]}`);
     }
   }
-  await page.waitForTimeout(HYDRATION_WAIT_MS);
+  // The first load of a URL gets the full hydration wait; the probes' reloads of it a short one,
+  // then until its own entrance animations have finished.
+  const reload = loadedUrls.get(page)?.has(url);
+  await page.waitForTimeout(reload ? RELOAD_WAIT_MS : HYDRATION_WAIT_MS);
+  await page.evaluate((cap) => new Promise((resolve) => {
+    const end = performance.now() + cap;
+    const check = () => (document.getAnimations().some((a) => a.playState === 'running' && Number.isFinite(a.effect?.getComputedTiming().endTime)) && performance.now() < end ? setTimeout(check, 50) : resolve());
+    check();
+  }), SETTLE_MAX_MS).catch(() => {});
+  if (!loadedUrls.has(page)) loadedUrls.set(page, new Set());
+  loadedUrls.get(page).add(url);
   const landed = verify();
   return { landed, redirected: !sameDocument(url, landed), loadedAt: Date.now() };
 };

@@ -1,13 +1,14 @@
 // The gestures: what one control, one toggle, one click target and the reduced-motion pass do.
 import { join } from 'node:path';
 import {
-  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CONTACT_SHEET_STEP_MS, DENY_HREF, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FOCUS_DWELL_MS, FRAME_MS,
-  HIT_TEST_POINTS, HOVER_DWELL_MS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_TAIL_MS, PRESS_DWELL_MS, SETTLE_MAX_MS,
-  REDUCED_LOOP_SPINNER_PX, REST_MARGIN_MS, REST_MAX_MS, REST_MIN_MS, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SETTLE_MARGIN_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
+  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CONTACT_SHEET_STEP_MS, DENY_HREF, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
+  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
+  REDUCED_LOOP_SPINNER_PX, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
+  TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
 import { createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced } from './browser.mjs';
 import { interruptionJumps } from './continuity.mjs';
-import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass } from './page-scripts.mjs';
+import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
 import { analyzeRecording } from './series.mjs';
 
@@ -15,20 +16,10 @@ const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source, flags: DENY_TEXT
 const asElement = (jsHandle) => jsHandle.asElement();
 const wait = (page, ms) => page.waitForTimeout(ms);
 
-// Dwells at least `min` ms, then until the CSS and WAAPI animations of `root` and its subtree have
-// finished (at most SETTLE_MAX_MS): a slow transition is measured to its end, a fast one is not
-// waited for beyond the minimum.
-const settle = async (page, root, min) => {
-  await wait(page, min);
-  await root.evaluate(async (n, cap) => {
-    const end = performance.now() + cap;
-    while (performance.now() < end) {
-      const running = n.getAnimations({ subtree: true }).filter((a) => a.playState === 'running' && Number.isFinite(a.effect?.getComputedTiming().endTime));
-      if (!running.length) return;
-      await Promise.race([Promise.all(running.map((a) => a.finished.catch(() => {}))), new Promise((r) => setTimeout(r, 100))]);
-    }
-  }, SETTLE_MAX_MS);
-};
+// Waits until `root` is still (see waitSettled): a slow transition is measured to its end, a fast
+// one costs a few frames.
+const settle = (root, { min = SETTLE_MIN_MS, quiet = SETTLE_QUIET_MS } = {}) => root.evaluate(waitSettled, { minMs: min, quietMs: quiet, capMs: SETTLE_MAX_MS });
+const settlePage = async (page, options) => settle(await page.$('html'), options);
 
 export const denied = (handle) => handle.evaluate(denyReason, DENY);
 
@@ -86,7 +77,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   if (info.kind !== 'focus-only') {
     const base = await snapshot(proxy, VISIBLE_PROPS);
     const basePx = await shot(page, box);
-    const hover = await traced(page, proxy, async () => { await page.mouse.move(point.x, point.y); await settle(page, proxy, HOVER_DWELL_MS); });
+    const hover = await traced(page, proxy, async () => { await page.mouse.move(point.x, point.y); await settle(proxy); });
     if (hoverOnly && (await stillTransparent(proxy))) return { skipped: 'hidden' };
     const hovered = await snapshot(proxy, VISIBLE_PROPS);
     const hoverPx = await shot(page, box);
@@ -95,7 +86,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
       let press;
       if (real) {
         await guardPress(page, true);
-        press = await traced(page, proxy, async () => { await page.mouse.down(); await settle(page, proxy, PRESS_DWELL_MS); });
+        press = await traced(page, proxy, async () => { await page.mouse.down(); await settle(proxy); });
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
         await page.mouse.move(1, 1);
@@ -104,7 +95,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
       } else {
         let ids;
-        press = await traced(page, proxy, async () => { ids = await pseudo.force(proxy, ['hover', 'active']); await settle(page, proxy, PRESS_DWELL_MS); });
+        press = await traced(page, proxy, async () => { ids = await pseudo.force(proxy, ['hover', 'active']); await settle(proxy); });
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
@@ -113,7 +104,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
       }
     } else await page.mouse.move(1, 1);
     // Back to rest before the next gesture, or a slow transition leaks into the focus snapshot.
-    await wait(page, Math.min(REST_MAX_MS, Math.max(REST_MIN_MS, ...el.transition.durations) + REST_MARGIN_MS));
+    await settle(proxy);
     // Interrupt: enter, leave half-way through the hover motion; a reversing transition stays continuous.
     const hoverMs = Math.max(...hover.motion.flatMap((e) => e.moves.map((m) => m.durationMs)), 0);
     if (hoverMs >= INTERRUPT_MIN_MOTION_MS) {
@@ -124,7 +115,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
       await wait(page, Math.max(70, hoverMs / 2));
       await page.evaluate(() => window.__mt.mark('i'));
       await page.mouse.move(1, 1);
-      await wait(page, INTERRUPT_TAIL_MS);
+      await settle(proxy);
       const rec = await page.evaluate(() => window.__mt.end('i'));
       const frames = longWindows(await page.evaluate(() => window.__mt.loaf), interruptFrom);
       el.interrupt = rec?.marks.length ? interruptionJumps(rec, rec.marks[0], { durationMs: hoverMs, small: true, longFrames: frames }) : [];
@@ -139,7 +130,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   const wrapperBefore = await Promise.all(wrapperHandles.map((h) => snapshot(h, VISIBLE_PROPS)));
   const beforePx = await shot(page, box);
   let ids;
-  const focus = await traced(page, ring, async () => { ids = await pseudo.force(original, ['focus', 'focus-visible'], { 1: ['focus-within'], 2: ['focus-within'] }); await settle(page, ring, FOCUS_DWELL_MS); });
+  const focus = await traced(page, ring, async () => { ids = await pseudo.force(original, ['focus', 'focus-visible'], { 1: ['focus-within'], 2: ['focus-within'] }); await settle(ring); });
   const after = await snapshot(ring, VISIBLE_PROPS);
   const wrapperAfter = await Promise.all(wrapperHandles.map((h) => snapshot(h, VISIBLE_PROPS)));
   const afterPx = await shot(page, box);
@@ -191,26 +182,30 @@ export const probeToggle = async (ctx, index) => {
   const run = async (steps) => {
     const hint = await handle.evaluateHandle((n) => document.getElementById(n.getAttribute('aria-controls') || ''));
     await page.evaluate(([h]) => window.__mt.begin('p', null, true, h), [hint]);
-    for (const s of steps) { if (s === 'click') await click(); else await wait(page, s); }
+    // 'settle' waits until the toggle and the element it controls are still; a number waits that many ms.
+    for (const s of steps) {
+      if (s === 'click') await click();
+      else if (s === 'settle') await settle(handle, { min: TOGGLE_SETTLE_MIN_MS, quiet: TOGGLE_QUIET_MS });
+      else await wait(page, s);
+    }
     return page.evaluate(() => window.__mt.end('p'));
   };
   const moved = (rec) => analyzeRecording(rec).flatMap((e) => e.moves.filter((m) => m.startT >= rec.marks[0] - 2 * FRAME_MS));
   const jumps = [];
   let dur = 0;
   try {
-    const first = await run(['click', CLICK_RECORD_MS]);
+    const first = await run(['click', 'settle']);
     dur = Math.max(0, ...moved(first).map((m) => m.durationMs));
     if (dur >= TOGGLE_MIN_MOTION_MS) {
-      const settle = Math.round(dur + TOGGLE_SETTLE_MARGIN_MS);
       const check = (rec, direction) => { if (rec.marks.length > 1) for (const j of interruptionJumps(rec, rec.marks.at(-1), { durationMs: dur })) jumps.push({ ...j, direction }); };
-      await run(['click', settle]); // back to the starting state
+      await run(['click', 'settle']); // back to the starting state
       for (const share of TOGGLE_SHARES) {
         const half = Math.max(50, Math.round(dur * share));
-        check(await run(['click', half, 'click', settle]), 'opening'); // opening, reversed part-way
-        check(await run(['click', settle, 'click', half, 'click', settle]), 'closing'); // closing, reversed part-way
-        await run(['click', settle]); // closed again
+        check(await run(['click', half, 'click', 'settle']), 'opening'); // opening, reversed part-way
+        check(await run(['click', 'settle', 'click', half, 'click', 'settle']), 'closing'); // closing, reversed part-way
+        await run(['click', 'settle']); // closed again
       }
-    } else await run(['click', TOGGLE_SETTLE_MARGIN_MS]); // no motion: still return to the starting state
+    } else await run(['click', 'settle']); // no motion: still return to the starting state
   } catch (e) {
     ctx.notes.push(`toggle ${label} stopped: ${e.message.split('\n')[0]}`);
   } finally {
@@ -285,13 +280,13 @@ export const reducedPass = async (ctx, targets) => {
       const T = ['transform', 'translate', 'scale', 'rotate'];
       const rest = await snapshot(h, T);
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await wait(page, 150);
+      await settle(h);
       let ids = null;
       if (real) { await guardPress(page, true); await page.mouse.down(); } else ids = await pseudo.force(h, ['hover', 'active']);
-      await wait(page, PRESS_DWELL_MS);
+      await settle(h);
       const pressed = await snapshot(h, T);
       if (real) { await page.mouse.move(1, 1); await page.mouse.up(); await guardPress(page, false); } else { await pseudo.clear(ids); await page.mouse.move(1, 1); }
-      await wait(page, 300);
+      await settle(h);
       const released = await snapshot(h, T);
       per.set(path, { moves: reducedMoves(rest, pressed), residue: reducedResidue(rest, released) });
     }

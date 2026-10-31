@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT } from './helpers/cli.mjs';
 
@@ -12,6 +12,12 @@ test('the Playwright dev dependency is a caret range and the lockfile is past 1.
   const lock = JSON.parse(read('package-lock.json'));
   const [major, minor] = lock.packages['node_modules/playwright'].version.split('.').map(Number);
   assert.ok(major > 1 || minor > 43, `locked playwright ${lock.packages['node_modules/playwright'].version}`);
+});
+
+test('every test file is in exactly one of test:unit and test:browser, so no CI job silently drops it', () => {
+  const files = readdirSync(join(ROOT, 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `test/${f}`).sort();
+  const listed = (script) => pkg.scripts[script].split(' ').filter((x) => x.endsWith('.test.mjs')).sort();
+  assert.deepEqual([...listed('test:unit'), ...listed('test:browser')].sort(), files);
 });
 
 test('engines require a Node that can require() ES modules without a flag', () => {

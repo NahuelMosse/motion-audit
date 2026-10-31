@@ -1,4 +1,5 @@
-import test, { after, before } from 'node:test';
+import { after, before } from 'node:test';
+import { inShard, sharded as test } from './helpers/shard.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -30,8 +31,11 @@ after(async () => {
 
 const golden = JSON.parse(readFileSync(GOLDEN_PATH, 'utf8'));
 
-for (const entry of CLI_MATRIX) {
-  test(`fixture ${entry.name} yields exactly the expected findings and exit code`, async () => {
+// The golden comparison of every matrix entry. The three-runs job (fixture-runs.mjs) compares each
+// of its runs to the same golden file, so a job that runs it sets MA_SKIP_GOLDEN to audit nothing twice.
+for (const [position, entry] of CLI_MATRIX.entries()) {
+  const skip = process.env.MA_SKIP_GOLDEN ? 'covered by the three-runs job' : !inShard(entry.name, position) && 'other shard';
+  test(`fixture ${entry.name} yields exactly the expected findings and exit code`, { skip }, async () => {
     const r = await runCli([`${srv.url}/${entry.fixture}`, ...entry.args, '--json']);
     assert.ok(r.report, r.stderr);
     assert.deepEqual(signature(r.report), golden[entry.name].findings);

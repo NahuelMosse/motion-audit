@@ -88,6 +88,39 @@ export const cssPath = (n) => {
   return parts.join(' > ');
 };
 
+// Resolves when `n` (with its subtree and the element its aria-controls names) is still: no running
+// finite CSS or WAAPI animation and an unchanged signature of position, size, opacity, transform and
+// colours for `quietMs`, but not before `minMs` and not later than `capMs`. Infinite animations
+// (spinners, tickers) are ambient: they neither count as running nor enter the signature.
+export const waitSettled = (n, { minMs, quietMs, capMs }) => new Promise((resolve) => {
+  const controlled = document.getElementById(n.getAttribute?.('aria-controls') || '');
+  const roots = [n, controlled].filter(Boolean);
+  const isInfinite = (a) => a.effect?.getComputedTiming().iterations === Infinity;
+  const finiteRunning = () => roots.some((r) => r.getAnimations({ subtree: true }).some((a) => a.playState === 'running' && !isInfinite(a) && Number.isFinite(a.effect?.getComputedTiming().endTime)));
+  const signature = () => {
+    const ambient = roots.flatMap((r) => r.getAnimations({ subtree: true })).filter(isInfinite).map((a) => a.effect.target);
+    const nodes = roots.flatMap((r) => [r, ...r.querySelectorAll('*')].slice(0, 40)).filter((e) => !ambient.some((a) => a === e || a?.contains(e)));
+    const parts = nodes.map((e) => {
+      const r = e.getBoundingClientRect();
+      const c = getComputedStyle(e);
+      return [r.left, r.top, r.width, r.height].map((v) => v.toFixed(1)).join(',') + `,${c.opacity},${c.transform},${c.backgroundColor},${c.color},${c.boxShadow}`;
+    });
+    return `${document.documentElement.scrollHeight},${document.documentElement.scrollWidth}|${parts.join('|')}`;
+  };
+  const start = performance.now();
+  let last = signature();
+  let changed = start;
+  const tick = () => {
+    const now = performance.now();
+    const sig = signature();
+    if (sig !== last) { last = sig; changed = now; }
+    if (finiteRunning()) changed = now;
+    if (now - start >= capMs || (now - start >= minMs && now - changed >= quietMs)) resolve();
+    else requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+});
+
 // Why --interact must not press or toggle this element, or null.
 export const denyReason = (n, { selector, text, flags, href, named }) => {
   if (n.matches(selector)) return 'submit, reset, drag or slider control';

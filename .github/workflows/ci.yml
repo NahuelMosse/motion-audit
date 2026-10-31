@@ -4,25 +4,47 @@ on:
   push:
     branches: [main, hardening]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+  # Pure and quick tests, on every OS and both Node lines. No browser needed.
+  unit:
+    name: unit (${{ matrix.os }}, node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [22, 24]
+        node: ['22.12', '24']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+
+  # Everything that drives Chromium, once per OS on Node 24, split in parallel shards. On Linux the
+  # golden comparison of the fixtures is left to the three-runs job, which checks the same golden file.
+  browser:
+    name: browser (${{ matrix.os }}, shard ${{ matrix.shard }}/3)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
           cache: npm
       - run: npm ci
       - name: Install Chromium
@@ -31,10 +53,55 @@ jobs:
       - name: Install Chromium
         run: npx playwright install chromium
         if: runner.os != 'Linux'
-      - run: npm test
+      - name: Browser tests
+        run: npm run test:browser
+        env:
+          MA_SHARD: ${{ matrix.shard }}/3
+          MA_SKIP_GOLDEN: ${{ runner.os == 'Linux' && '1' || '' }}
+
+  # Every fixture three times on Linux: identical fingerprints each time, equal to the golden file.
+  stability:
+    name: three runs (ubuntu, shard ${{ matrix.shard }}/6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - name: Every fixture three times, identical findings each time
         run: node test/helpers/fixture-runs.mjs 3
-        timeout-minutes: 30
+        env:
+          MA_SHARD: ${{ matrix.shard }}/6
+
+  exit-codes:
+    name: exit codes (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        if: runner.os == 'Linux'
+      - name: Install Chromium
+        run: npx playwright install chromium
+        if: runner.os != 'Linux'
       - name: Failing audits exit exactly 1 and unusable audits exit exactly 2
         shell: bash
         run: |
@@ -51,6 +118,7 @@ jobs:
           kill $server
           echo "bad=$bad good=$good empty=$empty"
           [ "$bad" = "1" ] && [ "$good" = "0" ] && [ "$empty" = "2" ]
+
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 10

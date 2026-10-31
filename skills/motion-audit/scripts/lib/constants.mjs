@@ -8,25 +8,23 @@ export const DEFAULT_MAX_ELEMENTS = 40;
 export const VIEWPORT = { width: 1280, height: 900 };
 export const NAV_TIMEOUT_MS = 45000;
 export const WAIT_FOR_TIMEOUT_MS = 15000;
+// The first load of a URL waits this long for hydration and for client-side redirects; later loads
+// of the same URL (probes reload the page) wait RELOAD_WAIT_MS.
 export const HYDRATION_WAIT_MS = 800;
-export const PROBE_RELOAD_WAIT_MS = 600;
+export const RELOAD_WAIT_MS = 250;
 // Controls that show up later than this after a load are not "late": the audit waits this long
 // before it counts the controls again, and a larger count means the first count was incomplete.
-export const RECOUNT_AFTER_MS = 5000;
+export const RECOUNT_AFTER_MS = 3000;
 
-// Minimum dwell of each gesture; the dwell lasts until the CSS and WAAPI animations of the element
-// have finished, at most SETTLE_MAX_MS.
-export const HOVER_DWELL_MS = 450;
-export const PRESS_DWELL_MS = 250;
-export const FOCUS_DWELL_MS = 300;
+// A gesture lasts until the page is still: no running CSS or WAAPI animation on the element or its
+// subtree, and no change of position, size, opacity, transform or colour for SETTLE_QUIET_MS, but at
+// least SETTLE_MIN_MS (a transition starts on the next frame) and at most SETTLE_MAX_MS.
+export const SETTLE_MIN_MS = 50;
+export const SETTLE_QUIET_MS = 80;
 export const SETTLE_MAX_MS = 2000;
-export const REST_MIN_MS = 400;
-export const REST_MAX_MS = 1200;
-export const REST_MARGIN_MS = 150;
 export const INTERRUPT_MIN_MOTION_MS = 80;
 export const INTERRUPT_LEAD_MS = 80;
-export const INTERRUPT_TAIL_MS = 400;
-export const CLICK_LEAD_MS = 250;
+export const CLICK_LEAD_MS = 120;
 export const CLICK_RECORD_MS = 1500;
 export const CLICK_INTERRUPT_MS = 160;
 export const SCROLL_STEP_PX = 160;
@@ -36,7 +34,8 @@ export const SCROLL_TAIL_MS = 600;
 // Toggle probing.
 export const MAX_TOGGLES = 8;
 export const TOGGLE_MIN_MOTION_MS = 80;
-export const TOGGLE_SETTLE_MARGIN_MS = 350;
+export const TOGGLE_SETTLE_MIN_MS = 100;
+export const TOGGLE_QUIET_MS = 150;
 export const TOGGLE_SHARES = [0.3, 0.55];
 
 // Tracer.

@@ -121,8 +121,11 @@ npx motion-audit "$APP_URL/orders" --max 200 --min-coverage 0.8 --baseline motio
 ```bash
 npm ci
 npx playwright install chromium
-npm test                                  # unit and fixture tests
-node test/helpers/fixture-runs.mjs 3      # every fixture three times, identical findings required
+npm run test:unit                         # pure and quick, no browser
+npm run test:browser                      # fixtures, CLI and safety tests in Chromium
+npm test                                  # both
+node test/helpers/fixture-runs.mjs 3      # every fixture three times: identical findings, equal to the golden file
+MA_SHARD=2/6 npm run test:browser         # one slice of the browser tests (CI runs the slices in parallel jobs)
 ```
 
 ## License

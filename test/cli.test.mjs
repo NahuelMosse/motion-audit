@@ -1,4 +1,5 @@
-import test, { after, before } from 'node:test';
+import { after, before } from 'node:test';
+import { sharded as test } from './helpers/shard.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
