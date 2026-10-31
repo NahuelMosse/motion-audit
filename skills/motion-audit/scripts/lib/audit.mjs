@@ -237,10 +237,15 @@ export const audit = async (pageOrUrl, o = {}) => {
           const again = await measure(0);
           return again.missing ? null : again;
         });
+        const unconfirmedJump = r.jumps.length > 0 && (holder.unconfirmed ?? []).includes('jump');
         for (const name of holder.unconfirmed ?? []) r = { ...r, [name === 'jump' ? 'jumps' : name]: [] };
         click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, cadence: r.cadence, long: r.long, interrupt: r.interrupt };
         const label = `click ${o.click}`;
-        if (!r.jumps.length && r.unsure) raw.push({ kind: 'inconclusive', check: 'jump', element: label, key: 'click', detail: `a step in the transition could be a jump: frames too sparse: median Δt ${r.unsure.median} ms, max ${r.unsure.max} ms` });
+        // A jump seen in one recording and not in the re-measures is neither reported nor ruled out: it stays visible as undecided.
+        if (!r.jumps.length && (r.unsure || unconfirmedJump)) {
+          const c = r.unsure ?? r.cadence ?? { median: '?', max: '?' };
+          raw.push({ kind: 'inconclusive', check: 'jump', element: label, key: 'click', detail: `${unconfirmedJump && !r.unsure ? 'a jump was seen in one recording and not in the re-measures' : 'a step in the transition could be a jump'}: frames too sparse: median Δt ${c.median} ms, max ${c.max} ms` });
+        }
         if (r.jumps.length) add('jump', label, `${r.jumps.slice(0, 4).map((j) => `${j.label} ${j.prop} jumps ${j.size} at ${j.atMs} ms`).join('; ')}${r.jumps.length > 4 ? ` (+${r.jumps.length - 4} more)` : ''}`, 'click');
         for (const l of r.layout) add('layout-animated', label, `${l.label} animates its ${l.prop === 'layoutWidth' ? 'width' : 'height'} over ${l.durationMs} ms`, `${l.label} ${l.prop}`);
         if (r.long.length) add('long-frame', label, `during the transition: ${describeLongFrames(r.long)}`, 'click');
