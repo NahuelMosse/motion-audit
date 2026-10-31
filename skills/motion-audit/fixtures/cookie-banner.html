@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cookie banner over a control</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  #banner { position: fixed; left: 0; right: 0; bottom: 0; height: 90px; background: #222; color: #fff; padding: 16px; z-index: 10; }
+  #banner button { margin-right: 8px; }
+  .tall { height: 760px; }
+</style>
+
+</head>
+<body>
+<button id="top" type="button">Top control</button>
+<div class="tall"></div>
+<div style="position: fixed; left: 40px; bottom: 20px; z-index: 1;"><button id="covered" type="button">Covered control</button></div>
+<div id="banner"><span>We use cookies.</span> <button id="accept" type="button">Accept</button><button id="decline" type="button">Decline</button></div>
+</body>
+</html>

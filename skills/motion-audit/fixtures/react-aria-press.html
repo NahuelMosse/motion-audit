@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Buttons that activate the way React Aria's usePress does</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; display: grid; gap: 16px; justify-items: start; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<button id="early" type="button">Guardar</button>
+<button id="late" type="button">Guardar cambios</button>
+<script>
+  const ping = (name) => navigator.sendBeacon('/api/' + name, name);
+  const overTarget = (e, el) => { const r = el.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
+
+  // The shape of usePress in react-aria, reduced to what decides the activation: global
+  // pointerup and pointercancel listeners are added on pointerdown, and a pointercancel before the pointerup aborts.
+  const press = (el, onPointerUp) => {
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      const id = e.pointerId;
+      const end = () => { document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', cancel); };
+      const up = (ev) => { if (ev.pointerId !== id) return; end(); if (overTarget(ev, el)) onPointerUp(ev); };
+      const cancel = (ev) => { if (ev.pointerId === id) end(); };
+      document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', cancel);
+    });
+  };
+
+  // @react-aria/interactions 3.21: onPress fires on the pointerup over the target.
+  press(document.getElementById('early'), () => ping('press-early'));
+
+  // 3.25 and 3.53: the pointerup waits for the native click; when none arrives within 80 ms it calls target.click()
+  // itself, and the click is what activates (onClick runs onPress).
+  const late = document.getElementById('late');
+  late.addEventListener('click', () => ping('press-late'));
+  press(late, () => {
+    let seen = false;
+    const onClick = () => { seen = true; };
+    document.addEventListener('click', onClick, { once: true });
+    setTimeout(() => { document.removeEventListener('click', onClick); if (!seen) late.click(); }, 80);
+  });
+</script>
+</body>
+</html>

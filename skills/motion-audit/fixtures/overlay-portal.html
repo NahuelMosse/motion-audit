@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overlay mounted on open</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  .modal { position: fixed; left: 50%; top: 80px; width: 320px; margin-left: -160px; background: #fff; box-shadow: 0 8px 32px rgb(0 0 0 / 0.3); border-radius: 12px; overflow: hidden; animation: grow 400ms cubic-bezier(0.23, 1, 0.32, 1) forwards; }
+  @keyframes grow { from { height: 0; } to { height: 200px; } }
+  @media (prefers-reduced-motion: reduce) { .modal { animation-duration: 1ms; } }
+</style>
+
+</head>
+<body>
+<button id="open" type="button">Open dialog</button>
+<script>
+  // The dialog is appended to <body> on open and removed on close, like a portal.
+  const open = document.getElementById('open');
+  let modal = null;
+  open.addEventListener('click', () => {
+    if (modal) { modal.remove(); modal = null; return; }
+    modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.setAttribute('role', 'dialog');
+    modal.innerHTML = '<p style="padding:16px">Mounted on open, removed on close.</p>';
+    document.body.append(modal);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "motion-audit",
+  "version": "1.0.0",
+  "description": "Measures how a running web UI moves, frame by frame, in a real browser: missing hover/press/focus feedback, janky or jumping transitions, long frames and broken reduced motion.",
+  "license": "MIT",
+  "author": { "name": "Nahuel Mosse" }
+}

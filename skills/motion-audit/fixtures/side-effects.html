@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Handlers on every event the default mode must or must not dispatch</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; display: grid; gap: 16px; justify-items: start; }
+  button, input, a.link { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; color: inherit; text-decoration: none; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover, a.link:hover { background: #e4e4e4; }
+  button:active, a.link:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  .spacer { height: 1400px; }
+</style>
+</head>
+<body>
+<button id="hover-fx" type="button">Hover effects</button>
+<input id="field" aria-label="Field" value="x">
+<a id="nav" class="link" href="#nav">Navigation</a>
+<button id="keys" type="button">Keyboard</button>
+<div class="spacer"></div>
+<p id="seen">Impression target</p>
+<script>
+  const ping = (name) => navigator.sendBeacon('/api/' + name, name);
+  const byId = (id) => document.getElementById(id);
+  // Hover and scroll are real input: handlers bound to them run in the default mode.
+  byId('hover-fx').addEventListener('mouseenter', () => ping('hover-mouseenter'));
+  byId('hover-fx').addEventListener('mouseover', () => { localStorage.setItem('hovered', '1'); ping('hover-mouseover'); });
+  byId('hover-fx').addEventListener('pointerenter', () => ping('hover-pointerenter'));
+  new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) ping('impression'); }).observe(byId('seen'));
+  addEventListener('beforeunload', () => ping('beforeunload'));
+  // Focus, keyboard, press and click are never dispatched in the default mode.
+  for (const id of ['hover-fx', 'field', 'nav', 'keys']) {
+    const n = byId(id);
+    for (const type of ['focus', 'focusin', 'blur', 'keydown', 'keyup', 'keypress', 'pointerdown', 'mousedown', 'click', 'input', 'change']) n.addEventListener(type, () => ping(type));
+  }
+  document.addEventListener('keydown', () => ping('document-keydown'));
+</script>
+</body>
+</html>

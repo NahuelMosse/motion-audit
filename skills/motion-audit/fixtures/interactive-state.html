@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Controls with side effects</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  body { display: grid; gap: 16px; justify-items: start; }
+  [role=tab][aria-selected=true] { background: #dde6ff; }
+  .menu[hidden] { display: none; }
+  .handle { width: 40px; height: 24px; background: #ccc; border-radius: 6px; cursor: grab; }
+  .slider { width: 160px; height: 8px; background: #bbb; border-radius: 4px; transition: background-color 140ms ease-out; }
+  .slider:hover { background: #999; }
+  .slider:active { opacity: 0.8; }
+</style>
+
+</head>
+<body>
+<button id="menu" type="button" aria-expanded="false" aria-haspopup="menu">Actions</button>
+<div id="menu-items" class="menu" role="menu" hidden><button role="menuitem" type="button">Rename</button></div>
+<div role="tablist"><button role="tab" id="tab-a" aria-selected="true">Overview</button><button role="tab" id="tab-b" aria-selected="false">Activity</button></div>
+<button id="follow" type="button" aria-pressed="false">Follow</button>
+<form id="remove-form" action="/api/delete" method="post"><button id="delete">Delete account</button></form>
+<div id="drag" class="handle" draggable="true" aria-label="Drag handle"></div>
+<div id="volume" class="slider" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="30"></div>
+<script>
+  // Every side effect is reported to the server so a test can count what the audit caused.
+  const ping = (name) => navigator.sendBeacon('/api/' + name, name);
+  const menu = document.getElementById('menu');
+  menu.addEventListener('pointerdown', () => { ping('menu-pointerdown'); const now = menu.getAttribute('aria-expanded') !== 'true'; menu.setAttribute('aria-expanded', String(now)); document.getElementById('menu-items').hidden = !now; });
+  for (const tab of document.querySelectorAll('[role=tab]')) tab.addEventListener('mousedown', () => { ping('tab-mousedown'); document.querySelectorAll('[role=tab]').forEach((t) => t.setAttribute('aria-selected', String(t === tab))); });
+  const follow = document.getElementById('follow');
+  follow.setAttribute('aria-pressed', localStorage.getItem('follow') ?? 'false');
+  follow.addEventListener('click', () => { const now = follow.getAttribute('aria-pressed') !== 'true'; follow.setAttribute('aria-pressed', String(now)); localStorage.setItem('follow', String(now)); ping('follow'); });
+  document.getElementById('remove-form').addEventListener('submit', (e) => { e.preventDefault(); ping('delete'); });
+  document.getElementById('drag').addEventListener('dragstart', () => ping('drag'));
+  document.getElementById('volume').addEventListener('pointerdown', () => ping('slider'));
+  // Every change of a state attribute is reported, so a test sees what happened during the run
+  // and not only what a fresh load shows afterwards.
+  new MutationObserver((records) => {
+    for (const r of records) ping('state/' + r.target.id + '/' + r.attributeName + '/' + r.target.getAttribute(r.attributeName));
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['aria-pressed', 'aria-expanded', 'aria-selected'] });
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hover and press change nothing a person can see, but the pixels are not byte-identical</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; display: grid; gap: 16px; justify-items: start; }
+  .note { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; color: #1c1c1c; }
+  /* A compositing layer appears on hover and press: text is rasterised with different anti-aliasing. */
+  .note:hover { will-change: transform; }
+  .note:active { will-change: transform, opacity; }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<button class="note" type="button">Nothing visible changes</button>
+</body>
+</html>

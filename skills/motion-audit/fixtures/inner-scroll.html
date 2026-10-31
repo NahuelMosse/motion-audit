@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Controls inside a scroll container</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  #list { height: 180px; width: 320px; overflow-y: auto; border: 1px solid #ccc; padding: 8px; display: grid; gap: 8px; justify-items: start; }
+</style>
+
+</head>
+<body>
+<div id="list">
+<button type="button" class="item">Item 1</button>
+<button type="button" class="item">Item 2</button>
+<button type="button" class="item">Item 3</button>
+<button type="button" class="item">Item 4</button>
+<button type="button" class="item">Item 5</button>
+<button type="button" class="item">Item 6</button>
+<button type="button" class="item">Item 7</button>
+<button type="button" class="item">Item 8</button>
+<button type="button" class="item">Item 9</button>
+<button type="button" class="item">Item 10</button>
+<button type="button" class="item">Item 11</button>
+<button type="button" class="item">Item 12</button>
+<button type="button" class="item">Item 13</button>
+<button type="button" class="item">Item 14</button>
+</div>
+</body>
+</html>

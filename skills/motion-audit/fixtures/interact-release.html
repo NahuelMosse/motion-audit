@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pressing controls must not produce clicks elsewhere or start drags</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; display: grid; gap: 16px; justify-items: start; }
+  button, a.link { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; color: inherit; text-decoration: none; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover, a.link:hover { background: #e4e4e4; }
+  button:active, a.link:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<button id="plain" type="button">Plain</button>
+<a id="docs" class="link" href="#docs">Read the docs</a>
+<button id="other" type="button">Other</button>
+<script>
+  const ping = (name) => navigator.sendBeacon('/api/' + name, name);
+  // A page-level click handler (analytics, outside-click dismissal) sees every click that bubbles to the body.
+  document.body.addEventListener('click', (e) => ping(e.target === document.body ? 'click-body' : 'click-' + (e.target.id || e.target.tagName)));
+  document.addEventListener('dragstart', () => ping('dragstart'));
+</script>
+</body>
+</html>

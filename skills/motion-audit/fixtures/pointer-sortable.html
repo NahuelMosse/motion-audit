@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A sortable list driven by pointer events (a dnd-kit PointerSensor)</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  ul { list-style: none; margin: 0; padding: 0; width: 280px; display: grid; gap: 8px; }
+  li { border: 1px solid #bbb; background: #f2f2f2; padding: 10px 14px; border-radius: 8px; touch-action: none; cursor: grab; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  li:hover { background: #e4e4e4; }
+  li:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<ul id="list">
+  <li role="button" tabindex="0" aria-roledescription="sortable" data-id="a">Alpha</li>
+  <li role="button" tabindex="0" aria-roledescription="sortable" data-id="b">Beta</li>
+  <li role="button" tabindex="0" aria-roledescription="sortable" data-id="c">Gamma</li>
+</ul>
+<script>
+  // Like a PointerSensor with no activation constraint: pressing a row arms a drag, the first pointer
+  // movement while it is down starts it and reorders the list to the pointer, the release persists the order.
+  const list = document.getElementById('list');
+  let armed = null;
+  let moved = false;
+  list.addEventListener('pointerdown', (e) => { armed = e.target.closest('li'); moved = false; });
+  window.addEventListener('pointermove', (e) => {
+    if (!armed) return;
+    moved = true;
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('li');
+    const target = over && over !== armed ? over : e.clientY < list.getBoundingClientRect().top ? list.firstElementChild : null;
+    if (target && target !== armed) list.insertBefore(armed, target);
+  });
+  window.addEventListener('pointerup', () => {
+    if (armed && moved) {
+      const order = [...list.children].map((li) => li.dataset.id);
+      localStorage.setItem('order', JSON.stringify(order));
+      navigator.sendBeacon('/api/reorder', order.join(','));
+    }
+    armed = null;
+  });
+</script>
+</body>
+</html>

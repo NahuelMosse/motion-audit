@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A toast that teleports in, holds and leaves smoothly</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  #toast { width: 120px; padding: 10px 14px; margin-top: 24px; background: #1c1c1c; color: #fff; border-radius: 8px; }
+</style>
+</head>
+<body>
+<button id="show" type="button">Show toast</button>
+<div id="toast" role="status">Saved</div>
+<script>
+  // Slides 550 px in over 600 ms but skips 250 px at the half-way point, holds 300 ms, then slides back out smoothly.
+  const toast = document.getElementById('toast');
+  const run = (ms, at) => new Promise((resolve) => {
+    const start = performance.now();
+    const step = (now) => {
+      const u = Math.min(1, (now - start) / ms);
+      at(u);
+      if (u < 1) requestAnimationFrame(step); else resolve();
+    };
+    requestAnimationFrame(step);
+  });
+  document.getElementById('show').addEventListener('click', async () => {
+    await run(600, (u) => { toast.style.transform = 'translateX(' + Math.min(550, 300 * u + (u > 0.5 ? 250 : 0)) + 'px)'; });
+    await new Promise((r) => setTimeout(r, 300));
+    await run(400, (u) => { toast.style.transform = 'translateX(' + 550 * (1 - u) ** 3 + 'px)'; });
+  });
+</script>
+</body>
+</html>

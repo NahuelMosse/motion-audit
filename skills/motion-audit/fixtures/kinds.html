@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Linear, measured ease-in, residue and no reduced-motion rule</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  .lin { transition: transform 200ms linear; }
+  .lin:hover { transform: translateY(-4px); }
+  .stuck.on { transform: translateY(10px); }
+  .js { transition: none; }
+  .js:active { opacity: 0.85; }
+  body { display: grid; gap: 16px; justify-items: start; }
+</style>
+
+</head>
+<body>
+<button class="lin" type="button">Linear lift</button>
+<button class="stuck" type="button">Press leaves a transform</button>
+<button class="js" type="button">JS ease-in</button>
+<script>
+  // A pointerdown handler that never undoes its class: a transform stays after release.
+  const stuck = document.querySelector('.stuck');
+  stuck.addEventListener('pointerdown', () => stuck.classList.add('on'));
+  // Hover driven by a requestAnimationFrame loop with a cubic ease-in.
+  const js = document.querySelector('.js');
+  let frame = 0;
+  js.addEventListener('mouseenter', () => {
+    let start = null;
+    const step = (now) => {
+      start ??= now;
+      const u = Math.min(1, (now - start) / 250);
+      js.style.transform = 'translateY(' + (-10 * u ** 3) + 'px)';
+      if (u < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+  });
+  js.addEventListener('mouseleave', () => { cancelAnimationFrame(frame); js.style.transform = ''; });
+</script>
+</body>
+</html>

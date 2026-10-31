@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Large table with a toast</title>
+<style>
+  :root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; color: #1c1c1c; }
+  main { padding: 32px; }
+  table { border-collapse: collapse; width: 100%; }
+  td { border-bottom: 1px solid #ddd; padding: 4px 8px; }
+  .tag { background: #eef; border-radius: 4px; padding: 0 6px; }
+  a { color: #2a5bd7; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #bbb; background: #f2f2f2;
+    transition: background-color 140ms var(--ease-out), transform 120ms var(--ease-out); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  #toast { position: fixed; right: 24px; bottom: 24px; background: #222; color: #fff; padding: 10px 16px; border-radius: 8px;
+    opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out), visibility 0s linear 200ms; }
+  #toast.show { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+  @media (prefers-reduced-motion: reduce) { button:active, #toast { transform: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Orders</h1>
+  <button id="save">Save</button>
+  <table>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<div id="toast" role="status">Saved</div>
+<script>
+  // Enough rows to be a real table, few enough that style and layout stay well under a frame
+  // budget even with the CPU throttled 4x.
+  document.getElementById('rows').innerHTML = Array.from({ length: 60 }, (_, i) => `<tr><td>Order ${i}</td><td>Client ${i % 30}</td><td><span class="tag">open</span></td><td>${(i * 3.5).toFixed(2)}</td><td>view</td></tr>`).join('');
+  const toast = document.getElementById('toast');
+  document.getElementById('save').addEventListener('click', () => {
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1200);
+  });
+</script>
+</body>
+</html>
