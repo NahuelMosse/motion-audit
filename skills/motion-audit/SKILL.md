@@ -97,11 +97,14 @@ real pointer and scroll the real page, so handlers bound to hover (`mouseenter`,
 `beforeunload` beacons run: audit a throwaway or staging environment, not one where an impression or a
 hover event is billed or irreversible. `--interact` is opt-in and adds a real press and the
 toggle probes (`not-interruptible`, `reduced-motion-residue`); a denylist skips submit and reset
-controls (inside their form or tied to it with `form=`), buttons with no accessible name, links to
-logout/delete routes, destructive or payment wording in English, Spanish, Portuguese, French, German and
-Italian (including `aria-labelledby` and image alt text), `[draggable]`, sliders and separators; the
+controls (inside their form or tied to it with `form=`), buttons with no accessible name, every link
+whose `href` is not a `#fragment` (and any control inside one), destructive or payment wording in
+English, Spanish, Portuguese, French, German and Italian (including `aria-labelledby` and image alt
+text), `[draggable]`, sliders and separators; a press is released where it was made (the pointer never
+moves while it is down, so nothing is dragged) with the click cancelled; the
 page is reloaded between probes, the run stops if a gesture navigates, every toggle is clicked as the
-same node an even number of times, and the denylist is checked again before each click. Use it only
+same node an even number of times, and the denylist is checked again before each click and before the
+reduced-motion pass presses a control. Use it only
 against a disposable environment.
 
 `--click <selector>` is an explicit click on the control you name, and it clicks more than once: twice

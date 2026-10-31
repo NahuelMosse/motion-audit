@@ -160,7 +160,7 @@ export const audit = async (pageOrUrl, o = {}) => {
         el.path = path;
         el.real = el.pressMode === 'real';
         elements.push(el);
-        targets.push({ path, real: el.real });
+        targets.push({ path, real: el.real, label });
         if (o.interact && !sameLocation(page.url(), landed)) {
           navigated = true;
           notes.push(`interacting with ${label} navigated to ${page.url()}: audit stopped there; the controls after it were not audited`);
@@ -232,7 +232,7 @@ export const audit = async (pageOrUrl, o = {}) => {
           return again.missing ? null : again;
         });
         for (const name of holder.unconfirmed ?? []) r = { ...r, [name === 'jump' ? 'jumps' : name]: [] };
-        click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, long: r.long, interrupt: r.interrupt };
+        click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, cadence: r.cadence, long: r.long, interrupt: r.interrupt };
         const label = `click ${o.click}`;
         if (!r.jumps.length && r.unsure) raw.push({ kind: 'inconclusive', check: 'jump', element: label, key: 'click', detail: `a step in the transition could be a jump: frames too sparse: median Δt ${r.unsure.median} ms, max ${r.unsure.max} ms` });
         if (r.jumps.length) add('jump', label, `${r.jumps.slice(0, 4).map((j) => `${j.label} ${j.prop} jumps ${j.size} at ${j.atMs} ms`).join('; ')}${r.jumps.length > 4 ? ` (+${r.jumps.length - 4} more)` : ''}`, 'click');

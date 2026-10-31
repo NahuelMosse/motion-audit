@@ -122,8 +122,12 @@ export const waitSettled = (n, { minMs, quietMs, capMs }) => new Promise((resolv
 });
 
 // Why --interact must not press or toggle this element, or null.
-export const denyReason = (n, { selector, text, flags, href, named }) => {
+export const denyReason = (n, { selector, text, flags, named }) => {
   if (n.matches(selector)) return 'submit, reset, drag or slider control';
+  // A link that is not a same-document fragment navigates (and a GET may mark things read or log out) before
+  // anything can notice; so does a control inside such a link.
+  const link = n.closest('a[href], area[href]');
+  if (link && !(link.getAttribute('href') ?? '').startsWith('#')) return `link that leaves the page (${(link.getAttribute('href') ?? '').slice(0, 40)})`;
   // A submit button of a form, wherever it sits (inside it or tied to it with form=): a default <button> submits.
   if (n.form && ['submit', 'image', 'reset'].includes(n.type)) return 'submits or resets a form';
   const byIds = (n.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.textContent ?? '');
@@ -131,8 +135,6 @@ export const denyReason = (n, { selector, text, flags, href, named }) => {
   const names = [...byIds, n.getAttribute('aria-label'), n.textContent, n.getAttribute('title'), n.getAttribute('value'), n.getAttribute('alt'), ...inner].map((x) => (x ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean);
   const wording = names.find((x) => new RegExp(text, flags).test(x));
   if (wording) return `destructive or irreversible wording ("${wording.slice(0, 30)}")`;
-  const target = n.getAttribute('href') ?? '';
-  if (target && new RegExp(href, 'i').test(target)) return `link to a destructive route (${target.slice(0, 40)})`;
   if (!names.length && n.matches(named)) return 'no accessible name: it may be a destructive icon button';
   return null;
 };

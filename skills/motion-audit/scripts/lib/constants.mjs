@@ -126,13 +126,13 @@ export const INTERACTIVE = 'a[href], button, input:not([type=hidden]), select, t
 export const TOGGLE = '[aria-expanded], [aria-controls], [aria-pressed], summary, [data-toggle]';
 // Controls that --interact never presses or toggles: they submit, destroy, leave, drag or resize.
 // Also denied in denyReason: any submit or reset control owned by a form (inside it or through form=),
-// links whose href names a destructive route, and buttons with no accessible name.
+// links (and anything inside one) whose href is not a same-document fragment, and buttons with no accessible name.
 export const DENY_SELECTOR = '[type=submit], [type=image], [type=reset], [draggable=true], [role=slider], [role=separator], [role=scrollbar], input[type=range], input[type=file]';
 const DENY_WORDS = [
   // English
-  'delete', 'remove', 'destroy', 'discard', 'logout', 'log out', 'sign out', 'signout', 'unsubscribe', 'pay', 'buy', 'purchase', 'checkout', 'submit', 'send', 'confirm', 'archive', 'publish', 'deploy', 'reset',
+  'delete', 'remove', 'destroy', 'discard', 'logout', 'log out', 'sign out', 'signout', 'unsubscribe', 'pay', 'buy', 'purchase', 'checkout', 'submit', 'send', 'confirm', 'archive', 'publish', 'deploy', 'reset', 'place order', 'subscribe', 'revoke', 'block',
   // Spanish
-  'eliminar', 'elimina', 'borrar', 'borra', 'quitar', 'descartar', 'salir', 'cerrar sesión', 'cerrar sesion', 'desconectar', 'darse de baja', 'pagar', 'paga', 'comprar', 'compra', 'enviar', 'envía', 'envia', 'confirmar', 'confirma', 'publicar', 'publica', 'archivar', 'restablecer',
+  'eliminar', 'elimina', 'borrar', 'borra', 'quitar', 'descartar', 'salir', 'cerrar sesión', 'cerrar sesion', 'desconectar', 'darse de baja', 'pagar', 'paga', 'comprar', 'compra', 'enviar', 'envía', 'envia', 'confirmar', 'confirma', 'publicar', 'publica', 'archivar', 'restablecer', 'realizar pedido', 'suscribir', 'revocar', 'bloquear',
   // Portuguese
   'excluir', 'apagar', 'sair', 'encerrar sessão', 'encerrar sessao',
   // French
@@ -143,7 +143,6 @@ const DENY_WORDS = [
   'cancella', 'rimuovi', 'esci', 'paga', 'acquista', 'invia', 'conferma', 'pubblica',
 ];
 export const DENY_TEXT = new RegExp(`(?<!\\p{L})(?:${DENY_WORDS.join('|')})(?!\\p{L})`, 'iu');
-export const DENY_HREF = /(?:^|[/_?&=.#-])(?:log-?out|sign-?out|signout|delete|destroy|remove|unsubscribe|deactivate|logoff)(?:[/_?&=.#-]|$)/i;
 // Controls that must have an accessible name to be pressed: an unnamed one may be a trash can.
 export const NAMED_CONTROL = 'button, summary, [role=button]';
 export const LOGIN_PATH = /\/(log-?in|sign-?in|sign_in|auth|sso|session\/new)(\/|$|\?)/i;

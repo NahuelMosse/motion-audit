@@ -1,18 +1,18 @@
 // The gestures: what one control, one toggle, one click target and the reduced-motion pass do.
 import { join } from 'node:path';
 import {
-  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, DENY_HREF, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
+  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
   HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, CLICK_UNSURE_MAX_DT_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
   REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
 import { auxPage, createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced, unattributedLimit } from './browser.mjs';
 import { interruptionJumps, restartUnfollowed } from './continuity.mjs';
-import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
+import { denyReason, describeElement, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
-import { analyzeRecording, animatedMove } from './series.mjs';
+import { analyzeRecording, animatedMove, median } from './series.mjs';
 
-const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source, flags: DENY_TEXT.flags, href: DENY_HREF.source, named: NAMED_CONTROL };
+const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source, flags: DENY_TEXT.flags, named: NAMED_CONTROL };
 const asElement = (jsHandle) => jsHandle.asElement();
 const wait = (page, ms) => page.waitForTimeout(ms);
 
@@ -36,9 +36,16 @@ const undecided = (motion) => motion.flatMap((e) => e.moves).filter((m) => m.eas
 const needsRetry = (motion) => sparsity(motion) < SPARSE_DENSITY || undecided(motion) > 0;
 const better = (next, cur) => (undecided(next.motion) !== undecided(cur.motion) ? undecided(next.motion) < undecided(cur.motion) : sparsity(next.motion) > sparsity(cur.motion));
 
-// A real press is released away from the control, which still makes the browser dispatch a click
-// on the common ancestor (the body) and start a native drag on links. Both are cancelled before
-// any page handler below the window sees them.
+// A real press is released where it was pressed, never after a movement: a pointer that moves while
+// down starts a drag (native or a pointer-event sortable) and drops it somewhere. The release still makes
+// the browser dispatch a click on the control; it is cancelled in the capture phase of the window, before
+// any page handler sees it (as are the other events a stray release can produce). Only then does the
+// pointer move away.
+const releasePress = async (page) => {
+  await page.mouse.up();
+  await guardPress(page, false);
+  await page.mouse.move(1, 1);
+};
 const guardPress = (page, on) => page.evaluate((enable) => {
   const events = ['click', 'auxclick', 'dblclick', 'dragstart'];
   if (enable) {
@@ -66,7 +73,7 @@ const stillTransparent = (h) => h.evaluate((n) => { for (let e = n; e; e = e.par
 
 // Hover, press, hover-leave and keyboard focus of one control. Returns { el } or { skipped: reason }.
 // Observe-only by default: the pointer only hovers; :active and :focus-visible are forced over CDP.
-// With ctx.interact the press is real (mouse down, then released away from the control).
+// With ctx.interact the press is real (mouse down, released in place with the click cancelled, then moved away).
 export const auditElement = async (ctx, original, label, { hoverOnly = false } = {}) => {
   const { page, pseudo } = ctx;
   const proxy = asElement(await original.evaluateHandle(proxyOf)) ?? original;
@@ -111,9 +118,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         press = await traced(page, proxy, async () => { await page.mouse.down(); await settle(proxy); });
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
-        await page.mouse.move(1, 1);
-        await page.mouse.up();
-        await guardPress(page, false);
+        await releasePress(page);
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
       } else {
         let ids;
@@ -264,6 +269,19 @@ const scriptDriven = (rec, label) => {
   });
 };
 
+// The cadence of the step a click's jump check could not decide, or null: only script-driven motion (the browser
+// says a CSS transition or animation is one, and no teleport) whose step fell in intervals too long to judge.
+export const clickUnsure = (moved, rec) => moved.filter((e) => scriptDriven(rec, e.label)).flatMap((e) => e.moves)
+  .filter((m) => m.unresolved && m.cadence.max > CLICK_UNSURE_MAX_DT_MS).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null;
+
+// Median and longest interval between the frames recorded after the click: how well the recording could follow a value.
+export const recordingCadence = (rec) => {
+  const from = (rec.marks[0] ?? 0) - 2 * FRAME_MS;
+  const frames = [...new Set(rec.elems.flatMap((e) => e.t))].filter((x) => x >= from).sort((a, b) => a - b);
+  const dts = frames.slice(1).map((x, i) => x - frames[i]);
+  return dts.length ? { median: Math.round(median(dts)), max: Math.round(Math.max(...dts)) } : null;
+};
+
 export const clickMeasurer = (ctx, selector, interrupt) => {
   const { page, url } = ctx;
   const attempt = async (trace) => {
@@ -311,8 +329,8 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       moved,
       long: longFramesBetween(quiet.loaf, quiet.from, Infinity, unattributedLimit(page)),
       // A step the frames were too sparse to judge, with no jump found in any recording: the check is undecided.
-      // Only script-driven motion: the browser says a CSS transition or animation is one, and no teleport.
-      unsure: moved.filter((e) => scriptDriven(rec, e.label)).flatMap((e) => e.moves).filter((m) => m.unresolved && m.cadence.max > CLICK_UNSURE_MAX_DT_MS).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null,
+      unsure: clickUnsure(moved, rec),
+      cadence: recordingCadence(rec),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
       interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from, unattributedLimit(page)) }) : [],
@@ -333,21 +351,26 @@ export const reducedPass = async (ctx, targets) => {
     await load(page, url, ctx.loadOptions);
     const pseudo = await createPseudoStates(page.context(), page);
     const per = new Map();
-    for (const { path, real } of targets) {
+    for (const { path, real, label } of targets) {
       const h = await page.$(path);
       if (!h || !(await h.isVisible())) continue;
-      await h.scrollIntoViewIfNeeded();
-      const box = await h.boundingBox();
-      if (!box) continue;
+      // The path (nth-of-type) may name another element after a reload: it is pressed only when it is the
+      // control that was audited, still safe, and the one under the pointer.
+      const found = await h.evaluate(describeElement);
+      if (found !== label) { ctx.notes.push(`reduced-motion pass skipped ${label}: the path now leads to ${found}`); continue; }
+      const refused = real ? await denied(h) : null;
+      if (refused) { ctx.notes.push(`reduced-motion pass skipped ${label}: no longer safe to press (${refused})`); continue; }
+      const point = await reachablePoint(h);
+      if (!point) { ctx.notes.push(`reduced-motion pass skipped ${label}: covered by another element`); continue; }
       const T = ['transform', 'translate', 'scale', 'rotate'];
       const rest = await snapshot(h, T);
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.move(point.x, point.y);
       await settle(h);
       let ids = null;
       if (real) { await guardPress(page, true); await page.mouse.down(); } else ids = await pseudo.force(h, ['hover', 'active']);
       await settle(h);
       const pressed = await snapshot(h, T);
-      if (real) { await page.mouse.move(1, 1); await page.mouse.up(); await guardPress(page, false); } else { await pseudo.clear(ids); await page.mouse.move(1, 1); }
+      if (real) await releasePress(page); else { await pseudo.clear(ids); await page.mouse.move(1, 1); }
       await settle(h);
       const released = await snapshot(h, T);
       per.set(path, { moves: reducedMoves(rest, pressed), residue: reducedResidue(rest, released) });

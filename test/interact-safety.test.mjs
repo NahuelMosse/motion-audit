@@ -57,6 +57,17 @@ const DANGEROUS = {
   'input submit': '<input type="submit" value="Go">',
   'link to logout': '<a href="/api/logout" aria-expanded="false">Account</a>',
   'link to delete': '<a href="/orders/12/delete">Order</a>',
+  'link to a page': '<a href="/settings" aria-expanded="false">Settings</a>',
+  'link with an empty href': '<a href="" aria-expanded="false">Reload</a>',
+  'control inside a link': '<a href="/inbox"><span role="button" tabindex="0">Wrapped</span></a>',
+  'place order': '<button type="button">Place order</button>',
+  Subscribe: '<button type="button">Subscribe</button>',
+  Revoke: '<button type="button">Revoke access</button>',
+  Block: '<button type="button">Block user</button>',
+  'Realizar pedido': '<button type="button">Realizar pedido</button>',
+  Suscribir: '<button type="button">Suscribir</button>',
+  Revocar: '<button type="button">Revocar acceso</button>',
+  Bloquear: '<button type="button">Bloquear usuario</button>',
   'role=button Eliminar': '<div role="button" tabindex="0">Eliminar</div>',
 };
 const SAFE = {
@@ -67,7 +78,7 @@ const SAFE = {
   'type=button inside a form': '<form><button type="button" aria-expanded="false">Filtros</button></form>',
   'aria-labelledby with a harmless name': '<span id="n">Favorites</span><button type="button" aria-pressed="false" aria-labelledby="n">x</button>',
   'img alt': '<button type="button"><img alt="Settings" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></button>',
-  'link to a page': '<a href="/settings" aria-expanded="false">Settings</a>',
+  'same-document fragment link': '<a href="#x" aria-expanded="false">Section</a>',
   'summary Details': '<details><summary>Details</summary>x</details>',
 };
 
@@ -75,7 +86,7 @@ test('the denylist covers real labels in several languages, form owners, links a
   await withPage(async (page) => {
     for (const [name, html] of Object.entries({ ...DANGEROUS, ...SAFE })) {
       await page.setContent(`<body>${html}</body>`);
-      const target = await page.$('button, summary, [role=button], input, a');
+      const target = await page.$('button, summary, [role=button], input, a:not(:has([role=button]))');
       const reason = await denied(target);
       if (name in DANGEROUS) assert.ok(reason, `${name} must be denied`);
       else assert.equal(reason, null, `${name} must be allowed, got: ${reason}`);
@@ -118,7 +129,36 @@ test('--interact releases a press without a click on the body and without starti
   });
 });
 
-test('a link that navigates on mousedown stops the audit with a note, not as an error', async () => {
+test('--interact never follows a link: no GET reaches the server, a fragment link is still pressed', async () => {
+  await withPage(async (page) => {
+    await page.goto(`${srv.url}/link-nav.html`);
+    srv.stats.requests.length = 0;
+    const report = await audit(page, { url: `${srv.url}/link-nav.html`, interact: true });
+    assert.deepEqual(srv.stats.requests.filter((r) => r !== 'GET /link-nav.html' && r.startsWith('GET ') && !/\.(css|js|ico)$/.test(r)), [], 'a request left the page');
+    assert.ok(!srv.stats.requests.some((r) => /notifications|inbox/.test(r)));
+    assert.equal(page.url(), `${srv.url}/link-nav.html`);
+    assert.equal(report.notes.filter((n) => /navigated/.test(n)).length, 0, report.notes.join(' | '));
+    assert.equal(report.elements.find((e) => /Panel/.test(e.label)).pressMode, 'real');
+    assert.equal(report.elements.find((e) => /Notifications/.test(e.label)).pressMode, 'forced');
+    assert.equal(report.elements.find((e) => /Wrapped/.test(e.label)).pressMode, 'forced');
+  });
+});
+
+test('a pointer-event sortable is neither reordered nor persisted: the press is released where it was made', async () => {
+  await withPage(async (page) => {
+    await page.goto(`${srv.url}/pointer-sortable.html`);
+    srv.stats.requests.length = 0;
+    const order = () => page.evaluate(() => [...document.querySelectorAll('li')].map((li) => li.dataset.id).join(''));
+    const report = await audit(page, { url: `${srv.url}/pointer-sortable.html`, interact: true });
+    assert.equal(report.coverage.audited, 3);
+    assert.ok(report.elements.every((e) => e.pressMode === 'real'));
+    assert.equal(await order(), 'abc');
+    assert.equal(await page.evaluate(() => localStorage.getItem('order')), null);
+    assert.deepEqual(calls(), []);
+  });
+});
+
+test('a control that navigates on mousedown stops the audit with a note, not as an error', async () => {
   const report = await audit(`${srv.url}/nav-mousedown.html`, { interact: true });
   assert.equal(report.coverage.errored, 0);
   assert.equal(report.coverage.skipped.error, undefined);
