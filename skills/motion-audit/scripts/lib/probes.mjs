@@ -254,6 +254,16 @@ export const probeToggle = async (ctx, index) => {
 
 // Everything that moves for 1.5 s after a real click, with the tracer off for the long-frame pass
 // (tracing hundreds of nodes would itself overrun the frames it times) and on for the trajectories.
+// Whether no CSS transition, CSS animation or Web Animation covers the element (or an ancestor) in a recording.
+const scriptDriven = (rec, label) => {
+  const byId = new Map(rec.elems.map((x) => [x.id, x]));
+  return rec.elems.filter((x) => x.label === label).every((x) => {
+    const chain = new Set();
+    for (let n = x, guard = 0; n && guard < 64; n = byId.get(n.parent), guard++) chain.add(n.id);
+    return !(rec.anims ?? []).some((a) => chain.has(a.nodeId));
+  });
+};
+
 export const clickMeasurer = (ctx, selector, interrupt) => {
   const { page, url } = ctx;
   const attempt = async (trace) => {
@@ -300,7 +310,8 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       moved,
       long: longFramesBetween(quiet.loaf, quiet.from, Infinity, unattributedLimit(page)),
       // A step the frames were too sparse to judge, with no jump found in any recording: the check is undecided.
-      unsure: moved.flatMap((e) => e.moves).filter((m) => m.unresolved && m.cadence.max > CLICK_UNSURE_MAX_DT_MS).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null,
+      // Only script-driven motion: the browser says a CSS transition or animation is one, and no teleport.
+      unsure: moved.filter((e) => scriptDriven(rec, e.label)).flatMap((e) => e.moves).filter((m) => m.unresolved && m.cadence.max > CLICK_UNSURE_MAX_DT_MS).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null,
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
       interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from, unattributedLimit(page)) }) : [],
