@@ -88,6 +88,25 @@ test('a teleport is found when the machine renders 30 fps with stalls, and smoot
   assert.equal(falsePositives, 0);
 });
 
+test('a rAF ease-in hover sampled every 1 to 6 frames, as on a 30 fps runner, is never a jump', () => {
+  let flagged = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    const rand = prng(seed * 97);
+    const times = withRest(irregularTimes(rand, 0, 700, 1, 6));
+    const v = times.map((t) => (t <= 0 ? 0 : -10 * Math.min(1, t / 250) ** 3));
+    if (analyzeSeries(times, v, 1)?.jumps.length) flagged++;
+  }
+  assert.equal(flagged, 0);
+});
+
+test('the first moved sample of a series is reported, so a motion started by a click is told from an ambient one at any cadence', () => {
+  const times = [-100, -50, 0, 50, 100, 150, 200, 250, 300, 350].map((t) => t + 1000);
+  const v = times.map((t) => (t < 1000 + 30 ? 0 : Math.min(100, (t - 1030) * 0.6)));
+  const r = analyzeSeries(times, v, 1);
+  assert.equal(r.firstT, 1050);
+  assert.equal(r.startT, 1000);
+});
+
 test('sparsity tells a densely sampled motion from one sampled every 50 ms', () => {
   const ease = EASINGS['strong ease-out'];
   const motion = (step) => {

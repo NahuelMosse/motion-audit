@@ -111,7 +111,14 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
       } else {
         let ids;
-        press = await traced(page, proxy, async () => { ids = await pseudo.force(proxy, ['hover', 'active']); await settle(proxy); });
+        const pressOnce = () => traced(page, proxy, async () => { ids = await pseudo.force(proxy, ['hover', 'active']); await settle(proxy); });
+        press = await pressOnce();
+        for (let again = 0; again < SPARSE_RETRIES && sparsity(press.motion) < SPARSE_DENSITY; again++) {
+          await pseudo.clear(ids);
+          await settle(proxy);
+          const next = await pressOnce();
+          if (sparsity(next.motion) > sparsity(press.motion)) press = next;
+        }
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
@@ -206,7 +213,7 @@ export const probeToggle = async (ctx, index) => {
     }
     return page.evaluate(() => window.__mt.end('p'));
   };
-  const moved = (rec) => analyzeRecording(rec).flatMap((e) => e.moves.filter((m) => m.startT >= rec.marks[0] - 2 * FRAME_MS));
+  const moved = (rec) => analyzeRecording(rec).flatMap((e) => e.moves.filter((m) => m.firstT >= rec.marks[0] - 2 * FRAME_MS));
   const jumps = [];
   let dur = 0;
   try {
@@ -263,7 +270,7 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
     const rec = traced2.rec;
     // What was already moving before the click (loops, carousels) is ambient, not the click's motion.
     const clickT = rec.marks[0] ?? Infinity;
-    const moved = analyzeRecording(rec).map((e) => ({ ...e, moves: e.moves.filter((m) => m.startT >= clickT - 2 * FRAME_MS) })).filter((e) => e.moves.length);
+    const moved = analyzeRecording(rec).map((e) => ({ ...e, moves: e.moves.filter((m) => m.firstT >= clickT - 2 * FRAME_MS) })).filter((e) => e.moves.length);
     return {
       moved,
       long: longFramesBetween(quiet.loaf, quiet.from, Infinity, unattributedLimit(page)),

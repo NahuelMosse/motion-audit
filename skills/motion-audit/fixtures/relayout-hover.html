@@ -21,7 +21,7 @@
 <table id="grid"></table>
 <script>
   const rows = [];
-  for (let r = 0; r < 800; r++) rows.push('<tr>' + Array.from({ length: 40 }, (_, c) => '<td>' + (r * 40 + c) + '</td>').join('') + '</tr>');
+  for (let r = 0; r < 2000; r++) rows.push('<tr>' + Array.from({ length: 40 }, (_, c) => '<td>' + (r * 40 + c) + '</td>').join('') + '</tr>');
   document.getElementById('grid').innerHTML = rows.join('');
 </script>
 </body>

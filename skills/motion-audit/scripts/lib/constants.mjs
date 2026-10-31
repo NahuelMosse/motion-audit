@@ -72,6 +72,8 @@ export const SERIES_JUMP_MAX_DT_MS = 6 * FRAME_MS;
 // An interval of a settled motion is a jump when it is a local speed peak (at least twice as fast as
 // both neighbours) and this many times faster than the average speed of the whole motion.
 export const SERIES_PEAK_SLOPE = 5;
+// ...and at least this many times faster than each neighbouring interval (an ease-in speeds up by less, even sampled coarsely).
+export const SERIES_NEIGHBOUR_RATIO = 3;
 export const JUMP_PEAK_SLOPE = 6;
 export const JUMP_MIN_SHARE = 0.15;
 export const RESTART_MIN_SHARE = 0.1;
