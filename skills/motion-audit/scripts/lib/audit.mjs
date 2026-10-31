@@ -52,7 +52,7 @@ export const undecidedOf = (el, later) => {
   if (unconfirmed.includes('jump')) {
     const motions = (x) => Object.values(x.moments).flatMap((d) => d.motion);
     for (const [moment, d] of Object.entries(el.moments)) for (const e of d.motion) for (const m of e.moves) {
-      if (!m.jumps.length) continue;
+      if (!m.jumps.length || !e.scripted) continue;
       const verdict = unconfirmedVerdict({ sightedDense: m.cadence.max <= SERIES_DENSE_MAX_DT_MS }, rows.map((x) => ({ jumps: [], decidable: decidable(motions(x)) })));
       if (verdict === 'inconclusive') out.push({ check: 'jump', key: `${moment} ${e.label} ${m.prop}`, detail: `${moment}: ${e.label} ${m.prop} showed a jump in one recording and not in the re-measures`, cadence: m.cadence });
     }
@@ -265,7 +265,7 @@ export const audit = async (pageOrUrl, o = {}) => {
           return again.missing ? null : again;
         });
         const unconfirmedInterrupt = r.interrupt.length > 0 && (holder.unconfirmed ?? []).includes('interrupt') && unconfirmedVerdict({ sightedDense: r.interruptDense }, reruns.map((x) => ({ jumps: x.interrupt, decidable: !x.interruptUnsure }))) === 'inconclusive';
-        const unconfirmedJump = r.jumps.length > 0 && (holder.unconfirmed ?? []).includes('jump') && unconfirmedVerdict(r, reruns) === 'inconclusive';
+        const unconfirmedJump = r.jumps.length > 0 && r.jumpScripted && (holder.unconfirmed ?? []).includes('jump') && unconfirmedVerdict(r, reruns) === 'inconclusive';
         for (const name of holder.unconfirmed ?? []) r = { ...r, [name === 'jump' ? 'jumps' : name]: [] };
         click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, cadence: r.cadence, long: r.long, interrupt: r.interrupt };
         const label = `click ${o.click}`;

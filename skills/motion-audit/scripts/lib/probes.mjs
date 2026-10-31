@@ -93,7 +93,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   const rest = transition(await proxy.evaluate(readTransition));
   const el = { label, kind: info.kind, selected: info.selected, transition: rest, moments: {}, long: [], pressMode: real ? 'real' : 'forced', hoverOnly };
   const moment = async (name, before, beforePx, after, afterPx, run) => {
-    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), motion: run.motion, transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
+    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), motion: run.motion.map((e) => ({ ...e, scripted: scriptDriven(run.rec, e.label) })), transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
     el.long.push(...run.long.map((l) => ({ moment: name, ...l })));
   };
   // The element that shows the focus ring: a visually hidden input shows it on its sibling.
@@ -371,6 +371,8 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       unsure: clickUnsure(moved, rec),
       cadence: recordingCadence(rec),
       decidable: decidable(moved),
+      // The browser says a CSS transition or animation cannot teleport: only a script-driven sighting can stay undecided.
+      jumpScripted: moved.filter((e) => e.moves.some((m) => m.jumps.length)).some((e) => scriptDriven(rec, e.label)),
       sightedDense: sightedDense(moved),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),

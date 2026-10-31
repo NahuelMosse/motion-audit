@@ -147,8 +147,11 @@ test('a hover interrupt or element jump dropped by the majority vote becomes an 
   // sparse sighting, no re-measure could judge: undecided
   assert.deepEqual(kinds(interrupt(false), [rerun(false), rerun(false)]), ['interrupt-jump hover']);
   // jumps of a gesture's motions follow the same rule, one row per sighting
-  const jumped = (max) => ({ unconfirmed: ['jump'], moments: { hover: { motion: [{ label: 'div', moves: [{ prop: 'left', jumps: [{ atMs: 1, size: 9 }], cadence: { median: 17, max } }] }] } } });
+  const jumped = (max, scripted = true) => ({ unconfirmed: ['jump'], moments: { hover: { motion: [{ label: 'div', scripted, moves: [{ prop: 'left', jumps: [{ atMs: 1, size: 9 }], cadence: { median: 17, max } }] }] } } });
   assert.deepEqual(kinds(jumped(17), [rerun(true), rerun(true)]), ['jump hover div left']);
   assert.deepEqual(kinds(jumped(90), [rerun(false), rerun(true)]), []);
   assert.deepEqual(kinds(jumped(90), [rerun(false), rerun(false)]), ['jump hover div left']);
+  // a CSS transition or animation cannot teleport: its sighting is never left undecided
+  assert.deepEqual(kinds(jumped(90, false), [rerun(false), rerun(false)]), []);
+  assert.deepEqual(kinds(jumped(17, false), [rerun(true), rerun(true)]), []);
 });
