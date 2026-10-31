@@ -1,5 +1,5 @@
 // Pure trajectory analysis: one property sampled over time, curve classification, jump detection.
-import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, FINE_SAMPLING_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_FRAMES } from './constants.mjs';
+import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, SERIES_DENSE_MAX_DT_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_FRAMES } from './constants.mjs';
 
 export const round = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
 export const median = (a) => {
@@ -62,13 +62,14 @@ export const unwrap = (v) => v.reduce((out, x, i) => {
 // step that is a sizeable share of the amplitude and moves several times faster than the average
 // speed of the whole motion (no easing curve peaks that high after its first interval) and than
 // both short neighbours. The first interval is skipped: an ease-out legitimately starts fastest.
-// `unresolved` counts steps that pass every test but the speed one in an interval longer than FINE_SAMPLING_MS (1.5 frames),
-// too long for it to decide.
+// `unresolved` counts steps that pass every test but the speed one, in a motion some interval of which is longer
+// than SERIES_DENSE_MAX_DT_MS (or in an interval too long to bound the velocity): the speed test cannot decide them.
 const findJumps = (t, v, start, settle, amp, t0, shape) => {
   const jumps = [];
   let unresolved = 0;
   if (settle - start < 4) return { jumps, unresolved };
   const avgVelocity = amp / Math.max(1, t[settle] - t0);
+  const dense = t.slice(start, settle + 1).every((x, i) => x - t[start + i - 1] <= SERIES_DENSE_MAX_DT_MS);
   const peak = SERIES_PEAK_SLOPE * (shape === 'spring' ? 2 : 1);
   const velocity = (k) => {
     const dt = t[k] - t[k - 1];
@@ -81,9 +82,9 @@ const findJumps = (t, v, start, settle, amp, t0, shape) => {
     if (vel === null) { unresolved++; continue; }
     const neighbours = [velocity(k - 1), velocity(k + 1)].filter((x) => x !== null);
     if (neighbours.some((x) => vel < SERIES_NEIGHBOUR_RATIO * x)) continue;
-    // Sampled frame by frame (60 Hz), a step slower than a jump is settled: it is no jump. In an interval of more
-    // than 1.5 frames (a 30 fps machine is not dense) the question stays open.
-    if (vel < peak * avgVelocity) { if (t[k] - t[k - 1] > FINE_SAMPLING_MS) unresolved++; continue; }
+    // Sampled frame by frame (60 Hz) all along, a step slower than a jump is settled: it is no jump. With any longer
+    // interval in the motion (a 30 fps machine, a stall) the question stays open.
+    if (vel < peak * avgVelocity) { if (!dense) unresolved++; continue; }
     jumps.push({ atMs: round(t[k] - t0, 0), size: round(step, 2) });
   }
   return { jumps, unresolved };

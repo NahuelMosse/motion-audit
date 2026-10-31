@@ -84,6 +84,9 @@ export const JUMP_MAX_DT_MS = 2.5 * FRAME_MS;
 // slope of a smooth curve over an interval never exceeds its steepest slope), so a machine that renders
 // 30 fps with stalls up to this long still gets its teleports found.
 export const SERIES_JUMP_MAX_DT_MS = 6 * FRAME_MS;
+// A motion none of whose intervals exceeds this (two 60 Hz frames) was sampled densely: a step in it that is slower
+// than a jump is settled. One longer interval anywhere in the motion leaves its slow steps undecided.
+export const SERIES_DENSE_MAX_DT_MS = 2 * FRAME_MS;
 // An interval of a settled motion is a jump when it is a local speed peak (at least twice as fast as
 // both neighbours) and this many times faster than the average speed of the whole motion.
 export const SERIES_PEAK_SLOPE = 5;
