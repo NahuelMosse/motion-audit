@@ -5,7 +5,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CLI_MATRIX } from '../fixture-matrix.mjs';
 import { FIXTURES, kindsOf, removeScratch, runCli } from './cli.mjs';
-import { GOLDEN_PATH, againstGolden, signature } from './golden.mjs';
+import { GOLDEN_PATH, againstGolden, denseInconclusive, signature } from './golden.mjs';
 import { inShard } from './shard.mjs';
 import { serve } from './serve.mjs';
 
@@ -23,7 +23,9 @@ export const runMatrix = async ({ runs = 3, filter = '', log = console.log } = {
         const seconds = Math.round((Date.now() - started) / 1000);
         const got = r.report ? againstGolden(signature(r.report), golden[entry.name].findings, golden[entry.name].exit) : null;
         const sig = got ? got.findings.join(',') : `no-report:${r.stderr.slice(0, 80)}`;
-        const matchesGolden = Boolean(got) && JSON.stringify(got.findings) === JSON.stringify(golden[entry.name].findings) && r.code === got.exit;
+        const stuck = r.report ? denseInconclusive(r.report) : [];
+        if (stuck.length) log(`  inconclusive although the recorded frames were dense (a stuck gate): ${stuck.join('; ')}`);
+        const matchesGolden = Boolean(got) && JSON.stringify(got.findings) === JSON.stringify(golden[entry.name].findings) && r.code === got.exit && !stuck.length;
         seen.push({ code: r.code, sig, seconds, matchesGolden, kinds: r.report ? kindsOf(r.report) : [] });
       }
       const stable = seen.every((s) => s.sig === seen[0].sig && s.code === seen[0].code);

@@ -77,14 +77,26 @@ test('controls that appear after the audit started make the run incomplete: exit
   assert.equal(exitCode(waited), 0);
 });
 
-test('--click presses the target twice, four times with --interrupt, and at most eight (sixteen) when re-recorded', async () => {
+// A noisy machine can flag a long frame and add re-measures, so the steady page is bounded rather than exact.
+test('--click on a steady page presses the target twice, four times with --interrupt', async () => {
   srv.stats.requests.length = 0;
   await audit(`${srv.url}/click-count.html`, { click: '#save' });
-  assert.ok(calls('save') >= 2 && calls('save') <= 8, `${calls('save')} presses`);
+  assert.ok(calls('save') >= 2 && calls('save') <= 8 && calls('save') % 2 === 0, `${calls('save')} presses`);
   srv.stats.requests.length = 0;
   await audit(`${srv.url}/click-count.html`, { click: '#save', interrupt: true });
-  // Every recording presses twice with --interrupt, so the count stays even.
-  assert.ok(calls('save') >= 4 && calls('save') <= 16 && calls('save') % 2 === 0, `${calls('save')} presses`);
+  assert.ok(calls('save') >= 4 && calls('save') <= 16 && calls('save') % 4 === 0, `${calls('save')} presses`);
+});
+
+// click-sparse.html blocks the thread mid-motion: the step is undecided in every recording (two more recordings)
+// and the long frames are flagged (two re-measures of two recordings each), so the documented maximum is reached.
+test('--click on a page that stalls mid-motion presses at most eight times, sixteen with --interrupt', async () => {
+  srv.stats.requests.length = 0;
+  const report = await audit(`${srv.url}/click-sparse.html`, { click: '#save' });
+  assert.ok(report.findings.some((f) => f.kind === 'long-frame' && f.element === 'click #save'), JSON.stringify(report.findings.map((f) => [f.kind, f.element])));
+  assert.equal(calls('save'), 8);
+  srv.stats.requests.length = 0;
+  await audit(`${srv.url}/click-sparse.html`, { click: '#save', interrupt: true });
+  assert.equal(calls('save'), 16);
 });
 
 test('audit(page) works on a page from browser.newPage(), whose context refuses further pages', async () => {

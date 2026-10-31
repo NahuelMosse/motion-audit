@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import { audit, exitCode } from '../skills/motion-audit/scripts/lib/index.mjs';
 import { CLI_MATRIX } from './fixture-matrix.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
-import { GOLDEN_PATH, againstGolden, signature } from './helpers/golden.mjs';
+import { GOLDEN_PATH, againstGolden, denseInconclusive, signature } from './helpers/golden.mjs';
 import { serve } from './helpers/serve.mjs';
 
 let srv;
@@ -35,12 +35,15 @@ const golden = JSON.parse(readFileSync(GOLDEN_PATH, 'utf8'));
 // of its runs to the same golden file, so a job that runs it sets MA_SKIP_GOLDEN to audit nothing twice.
 for (const [position, entry] of CLI_MATRIX.entries()) {
   const skip = process.env.MA_SKIP_GOLDEN ? 'covered by the three-runs job' : !inShard(entry.name, position) && 'other shard';
-  test(`fixture ${entry.name} yields exactly the expected findings and exit code`, { skip }, async () => {
+  test(`fixture ${entry.name} yields exactly the expected findings and exit code`, { skip }, async (t) => {
     const r = await runCli([`${srv.url}/${entry.fixture}`, ...entry.args, '--json']);
     assert.ok(r.report, r.stderr);
     const got = againstGolden(signature(r.report), golden[entry.name].findings, golden[entry.name].exit);
     assert.deepEqual(got.findings, golden[entry.name].findings);
     assert.equal(r.code, got.exit);
+    // An inconclusive row stands in for an expected finding only when the recording really was sparse.
+    assert.deepEqual(denseInconclusive(r.report), [], 'inconclusive although the recorded frames were dense (60 Hz): a stuck gate hides the finding');
+    if (got.inconclusive.length) t.diagnostic(`accepted as inconclusive, the recording was sparse: ${got.inconclusive.join(', ')}`);
   });
 }
 

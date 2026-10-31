@@ -1,5 +1,5 @@
 // Pure trajectory analysis: one property sampled over time, curve classification, jump detection.
-import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_FRAMES } from './constants.mjs';
+import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, JUMP_MAX_DT_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_FRAMES } from './constants.mjs';
 
 export const round = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
 export const median = (a) => {
@@ -62,7 +62,8 @@ export const unwrap = (v) => v.reduce((out, x, i) => {
 // step that is a sizeable share of the amplitude and moves several times faster than the average
 // speed of the whole motion (no easing curve peaks that high after its first interval) and than
 // both short neighbours. The first interval is skipped: an ease-out legitimately starts fastest.
-// `unresolved` counts steps that pass every test but the speed one in an interval too long for it to decide.
+// `unresolved` counts steps that pass every test but the speed one in an interval longer than JUMP_MAX_DT_MS,
+// too long for it to decide.
 const findJumps = (t, v, start, settle, amp, t0, shape) => {
   const jumps = [];
   let unresolved = 0;
@@ -80,7 +81,9 @@ const findJumps = (t, v, start, settle, amp, t0, shape) => {
     if (vel === null) { unresolved++; continue; }
     const neighbours = [velocity(k - 1), velocity(k + 1)].filter((x) => x !== null);
     if (neighbours.some((x) => vel < SERIES_NEIGHBOUR_RATIO * x)) continue;
-    if (vel < peak * avgVelocity) { unresolved++; continue; }
+    // Sampled frame by frame, a step slower than a jump is settled: it is no jump. Only an interval too long to
+    // bound the velocity of the step leaves the question open.
+    if (vel < peak * avgVelocity) { if (t[k] - t[k - 1] > JUMP_MAX_DT_MS) unresolved++; continue; }
     jumps.push({ atMs: round(t[k] - t0, 0), size: round(step, 2) });
   }
   return { jumps, unresolved };

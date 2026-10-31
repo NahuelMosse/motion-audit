@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A click target whose script-driven motion is sampled too coarsely to judge, and that blocks the thread</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  #box { width: 40px; height: 40px; background: #2a5bd7; margin-top: 24px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+</style>
+</head>
+<body>
+<button id="save" type="button">Save</button>
+<div id="box"></div>
+<script>
+  // Moves the box linearly over 600 ms from rAF. Two 130 ms blocks of the main thread (page script, over the
+  // long-frame limit) leave intervals longer than any the jump check can bound, with a step of 22 % of the path
+  // in each: recordings stay undecided and the long frames are a finding, so every re-measure of the click runs.
+  const box = document.getElementById('box');
+  let open = false;
+  let at = 0;
+  const busy = (ms) => { const end = performance.now() + ms; while (performance.now() < end); };
+  document.getElementById('save').addEventListener('click', () => {
+    navigator.sendBeacon('/api/save', 'save');
+    const from = at;
+    open = !open;
+    const to = open ? 240 : 0;
+    const start = performance.now();
+    setTimeout(() => busy(130), 100);
+    setTimeout(() => busy(130), 300);
+    const tick = (now) => {
+      const u = Math.min(1, (now - start) / 600);
+      at = from + (to - from) * u;
+      box.style.transform = `translateX(${at}px)`;
+      if (u < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+</script>
+</body>
+</html>
