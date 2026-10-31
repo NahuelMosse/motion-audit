@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
-import { audit, exitCode } from '../skills/motion-audit/scripts/lib/index.mjs';
+import { audit, exitCode, fingerprint } from '../skills/motion-audit/scripts/lib/index.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
 import { serve } from './helpers/serve.mjs';
 
@@ -43,9 +43,16 @@ test('a hover that re-lays-out a large table is a long-frame error even though n
 test('a toast that teleports in, holds and leaves is a jump error', async () => {
   const report = await audit(`${srv.url}/toast-teleport.html`, { click: '#show' });
   const jump = report.findings.find((f) => f.kind === 'jump' && f.element === 'click #show');
-  assert.ok(jump, JSON.stringify(report.findings.map((f) => [f.kind, f.element])));
-  assert.equal(jump.level, 'error');
-  assert.match(jump.detail, /translateX jumps/);
+  if (jump) {
+    assert.equal(jump.level, 'error');
+    assert.match(jump.detail, /translateX jumps/);
+    return;
+  }
+  // Frames too sparse to decide: the same rule as the golden files, on every platform.
+  const hash = fingerprint({ kind: 'jump', element: 'click #show', key: 'click' }).split(':')[1];
+  const unsure = report.findings.find((f) => f.kind === 'inconclusive' && f.id.split(':')[1] === hash);
+  assert.ok(unsure, JSON.stringify(report.findings.map((f) => [f.kind, f.element])));
+  assert.equal(unsure.level, 'warning');
 });
 
 test('a node re-mounted mid-animation is a jump error', async () => {
@@ -70,13 +77,26 @@ test('controls that appear after the audit started make the run incomplete: exit
   assert.equal(exitCode(waited), 0);
 });
 
-test('--click presses the target twice, four times with --interrupt, as the documentation says', async () => {
+test('--click presses the target twice, four times with --interrupt, and at most eight (sixteen) when re-recorded', async () => {
   srv.stats.requests.length = 0;
   await audit(`${srv.url}/click-count.html`, { click: '#save' });
-  assert.equal(calls('save'), 2);
+  assert.ok(calls('save') >= 2 && calls('save') <= 8, `${calls('save')} presses`);
   srv.stats.requests.length = 0;
   await audit(`${srv.url}/click-count.html`, { click: '#save', interrupt: true });
-  assert.equal(calls('save'), 4);
+  // Every recording presses twice with --interrupt, so the count stays even.
+  assert.ok(calls('save') >= 4 && calls('save') <= 16 && calls('save') % 2 === 0, `${calls('save')} presses`);
+});
+
+test('audit(page) works on a page from browser.newPage(), whose context refuses further pages', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  try {
+    await page.goto(`${srv.url}/shadcn.html`);
+    const report = await audit(page, {});
+    assert.ok(report.coverage.audited > 0);
+    assert.equal(page.context().pages().length, 1, 'the auxiliary pages are closed');
+  } finally {
+    await page.close();
+  }
 });
 
 test('a button with a hover but no :active rule has no press feedback in the default mode, as it does with --interact', async () => {

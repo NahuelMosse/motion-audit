@@ -228,7 +228,7 @@ export const audit = async (pageOrUrl, o = {}) => {
       else {
         const holder = { long: r.long, jumps: r.jumps, interrupt: r.interrupt };
         await confirm(holder, { long: (x) => x.long.length > 0, jump: (x) => x.jumps.length > 0, interrupt: (x) => x.interrupt.length > 0 }, async () => {
-          const again = await measure();
+          const again = await measure(0);
           return again.missing ? null : again;
         });
         for (const name of holder.unconfirmed ?? []) r = { ...r, [name === 'jump' ? 'jumps' : name]: [] };

@@ -29,6 +29,23 @@ const limits = new WeakMap();
 export const setUnattributedLimit = (page, ms) => limits.set(page, ms);
 export const unattributedLimit = (page) => limits.get(page) ?? LONG_FRAME_MS;
 
+// An auxiliary page next to the audited one. A page from `browser.newPage()` owns its context, which refuses
+// further pages: the auxiliary page then lives in a context of its own (with the page's session when `session`)
+// that closes with it.
+export const auxPage = async (context, { session = false } = {}) => {
+  try {
+    return await context.newPage();
+  } catch (e) {
+    const browser = context.browser();
+    if (!browser || !/browser.newContext()/.test(String(e?.message))) throw e;
+    const own = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, ...(session ? { storageState: await context.storageState() } : {}) });
+    const page = await own.newPage();
+    const close = page.close.bind(page);
+    page.close = async (options) => { await close(options).catch(() => {}); await own.close().catch(() => {}); };
+    return page;
+  }
+};
+
 // The longest frame of the audited page while nothing touches it (ambient animations, a busy
 // machine): a frame at least that long during a gesture says nothing about the gesture.
 export const idleFrameNoise = async (page, ms = IDLE_NOISE_MS) => {
@@ -41,7 +58,7 @@ export const idleFrameNoise = async (page, ms = IDLE_NOISE_MS) => {
 // Measures the frames of a blank page doing what the audit does (hover, leave, screenshot): the
 // longest one is the noise of this machine. Returns 0 where Long Animation Frames are unsupported.
 export const calibrateFrames = async (context) => {
-  const page = await context.newPage();
+  const page = await auxPage(context);
   try {
     await page.setViewportSize(VIEWPORT);
     await page.setContent('<body style="margin:0"><style>button{margin:40px;padding:8px 14px;transition:background-color 140ms}button:hover{background:#ddd}</style><button id="b">Probe</button>' + '<p>text</p>'.repeat(200) + '</body>');
@@ -175,7 +192,7 @@ export const load = async (page, url, { waitFor, allowRedirect = false } = {}) =
 // than PIXEL_CHANNEL_TOLERANCE in some channel. Anti-aliasing and compositing noise stay below it.
 // Decoding happens in a blank page of the same context, away from the page under audit.
 export const createPixelComparer = async (context) => {
-  const page = await context.newPage();
+  const page = await auxPage(context);
   const stats = (a, b, tolerance) => page.evaluate(async ([x, y, tol, block]) => {
     const decode = async (b64) => {
       const bin = atob(b64);

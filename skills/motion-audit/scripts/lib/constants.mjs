@@ -50,7 +50,7 @@ export const INTERRUPT_LEAD_MS = 80;
 export const CLICK_LEAD_MS = 120;
 export const CLICK_RECORD_MS = 1500;
 // A click recording whose only jump candidate fell in a frame too long to judge is recorded again, at most this many times.
-export const CLICK_RESOLVE_RETRIES = 4;
+export const CLICK_RESOLVE_RETRIES = 2;
 export const CLICK_INTERRUPT_MS = 160;
 export const SCROLL_STEP_PX = 160;
 export const SCROLL_STEP_MS = 90;

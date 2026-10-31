@@ -6,7 +6,7 @@ import {
   REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
-import { createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced, unattributedLimit } from './browser.mjs';
+import { auxPage, createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced, unattributedLimit } from './browser.mjs';
 import { interruptionJumps, restartUnfollowed } from './continuity.mjs';
 import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
@@ -284,7 +284,8 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
     const loaf = await page.evaluate(() => window.__mt.loaf);
     return { from, loaf, rec: trace ? await page.evaluate(() => window.__mt.end('c')) : null };
   };
-  const measure = async () => {
+  // `retries`: how many more recordings a step too coarse to judge may cost (each presses the target again).
+  const measure = async (retries = CLICK_RESOLVE_RETRIES) => {
     const quiet = await attempt(false);
     if (quiet.missing) return quiet;
     // What was already moving before the click (loops, carousels) is ambient, not the click's motion: a motion
@@ -299,7 +300,7 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
     let moved = analyze(traced2);
     // A step that only a frame too long to judge keeps from being a jump is recorded again: a machine that
     // drops frames rarely drops the same one every time.
-    for (let again = 0; again < CLICK_RESOLVE_RETRIES && !moved.some((e) => e.moves.some((m) => m.jumps.length)) && moved.some((e) => e.moves.some((m) => m.unresolved)); again++) {
+    for (let again = 0; again < retries && !moved.some((e) => e.moves.some((m) => m.jumps.length)) && moved.some((e) => e.moves.some((m) => m.unresolved)); again++) {
       const next = await attempt(true);
       if (next.missing) break;
       traced2 = next;
@@ -325,12 +326,12 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
 
 export const reducedPass = async (ctx, targets) => {
   const { context, url } = ctx;
-  const page = await context.newPage();
+  const page = await auxPage(context, { session: true });
   try {
     await page.setViewportSize(ctx.viewport ?? VIEWPORT);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await load(page, url, ctx.loadOptions);
-    const pseudo = await createPseudoStates(context, page);
+    const pseudo = await createPseudoStates(page.context(), page);
     const per = new Map();
     for (const { path, real } of targets) {
       const h = await page.$(path);
@@ -384,7 +385,7 @@ export const contactSheet = async (ctx, selector, out) => {
   await pseudo.clear(ids);
   await page.mouse.move(1, 1);
   await burst(6, 'out');
-  const sheet = await context.newPage();
+  const sheet = await auxPage(context);
   try {
     await sheet.setViewportSize({ width: 1200, height: 200 });
     await sheet.setContent(`<body style="margin:0;background:#888;display:flex;flex-wrap:wrap;gap:4px;padding:4px">${shots.map((s) => `<figure style="margin:0;font:10px sans-serif;color:#fff"><img src="data:image/png;base64,${s.data}"><figcaption>${s.at} ms${s.tag ? ` ${s.tag}` : ''}</figcaption></figure>`).join('')}</body>`);
