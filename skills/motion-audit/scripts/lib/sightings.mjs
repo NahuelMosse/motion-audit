@@ -1,6 +1,6 @@
 // What becomes of a sighting (a jump seen in one recording) that the re-measures do not reproduce: it is dropped only
 // when a re-measure that could see that very motion did not see it; otherwise it stays visible as undecided. Pure.
-import { FINE_SAMPLING_MS, JUMP_MAX_DT_MS, SERIES_DENSE_MAX_DT_MS, SERIES_JUMP_MAX_DT_MS, SIGHTING_MIN_SAMPLES } from './constants.mjs';
+import { FINE_SAMPLING_MS, JUMP_MAX_DT_MS, DENSE_MAX_MS, DENSE_MEDIAN_MS, SERIES_JUMP_MAX_DT_MS, SIGHTING_MIN_SAMPLES } from './constants.mjs';
 
 // The sampling a recording gave each motion in it. `moved`: [{ label, moves: [{ prop, samples, unresolved, cadence }] }].
 // `mark`: { median, max } of the intervals around the second gesture, for the checks that depend on one; null when
@@ -38,7 +38,7 @@ export const canSee = (coverage, sighting, { mark = false } = {}) => {
   return Boolean(coverage.mark) && coverage.mark.median <= FINE_SAMPLING_MS && coverage.mark.max <= JUMP_MAX_DT_MS;
 };
 
-export const isDense = (cadence) => Boolean(cadence) && cadence.max <= SERIES_DENSE_MAX_DT_MS;
+export const isDense = (cadence) => Boolean(cadence) && cadence.median <= DENSE_MEDIAN_MS && cadence.max <= DENSE_MAX_MS;
 
 // 'drop': every sighting was ruled out by a re-measure that could see it. Otherwise why one stays undecided:
 // 'flake' (a clear step in frame-by-frame sampling that the re-measures did not reproduce) or 'unseen' (no re-measure
@@ -58,10 +58,10 @@ export const undecidedReason = (cause, runs) => (cause === 'flake'
   ? `seen in 1 of ${runs} recordings, not reproduced`
   : `seen in 1 of ${runs} recordings; the others could not judge that motion (frames too sparse, or it was not there)`);
 
-// The CSS properties (as the tracer reports a keyframe's) whose animation moves a measured property. A transform moves
-// the box, so it also moves the measured position and size.
+// The CSS properties whose declared transition shows up as a measured property (a transform moves the box, so it also
+// moves the measured position and size).
 const TRANSFORM = ['transform', 'translate', 'scale', 'rotate'];
-export const MOVED_BY = {
+const MEASURED_BY = {
   translateX: TRANSFORM, translateY: TRANSFORM, scaleX: TRANSFORM, scaleY: TRANSFORM, rotate: TRANSFORM, opacity: ['opacity'],
   left: [...TRANSFORM, 'left', 'right', 'inset', 'marginLeft', 'marginRight'], top: [...TRANSFORM, 'top', 'bottom', 'inset', 'marginTop', 'marginBottom'],
   width: [...TRANSFORM, 'width', 'minWidth', 'maxWidth', 'flex', 'padding', 'paddingLeft', 'paddingRight'], height: [...TRANSFORM, 'height', 'minHeight', 'maxHeight', 'flex', 'padding', 'paddingTop', 'paddingBottom'],
@@ -71,4 +71,4 @@ export const MOVED_BY = {
 
 // The measured properties a CSS property moves (a declared `width` shows as width and layoutWidth; a `transform` as its parts).
 const camel = (name) => name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-export const measuredFor = (cssProp) => Object.keys(MOVED_BY).filter((m) => MOVED_BY[m].includes(camel(cssProp)));
+export const measuredFor = (cssProp) => Object.keys(MEASURED_BY).filter((m) => MEASURED_BY[m].includes(camel(cssProp)));

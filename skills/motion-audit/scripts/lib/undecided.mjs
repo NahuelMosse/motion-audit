@@ -16,15 +16,14 @@ export const undecidedOf = (el, later) => {
   const unconfirmed = el.unconfirmed ?? [];
   if (unconfirmed.includes('interrupt')) {
     const verdict = unconfirmedVerdict(el.interruptSightings ?? [], later.map((x) => ({ saw: x?.interrupt ?? [], coverage: x?.interruptCoverage ?? NO_COVERAGE })), { mark: true });
-    if (verdict !== 'drop') out.push({ check: 'interrupt-jump', key: 'hover', detail: `hover left mid-way: ${undecidedReason(verdict, CONFIRM_RUNS)}` });
+    if (verdict !== 'drop') out.push({ check: 'interrupt-jump', key: 'hover', detail: `hover left mid-way: ${undecidedReason(verdict, CONFIRM_RUNS)}`, cadence: el.interruptCadence });
   }
   if (unconfirmed.includes('jump')) {
     const reruns = later.map((x) => ({ saw: x ? elementSaw(x) : [], coverage: x ? elementCoverage(x) : NO_COVERAGE }));
     for (const [moment, d] of Object.entries(el.moments)) for (const e of d.motion) for (const m of e.moves) {
-      // Only script-driven motion: the browser says a CSS transition or animation cannot teleport.
-      if (!m.jumps.length || !m.scripted) continue;
+      if (!m.jumps.length) continue;
       const verdict = unconfirmedVerdict([{ moment, label: e.label, prop: m.prop, dense: isDense(m.cadence) }], reruns);
-      if (verdict !== 'drop') out.push({ check: 'jump', key: `${moment} ${e.label} ${m.prop}`, detail: `${moment}: ${e.label} ${m.prop} ${undecidedReason(verdict, CONFIRM_RUNS)}` });
+      if (verdict !== 'drop') out.push({ check: 'jump', key: `${moment} ${e.label} ${m.prop}`, detail: `${moment}: ${e.label} ${m.prop} ${undecidedReason(verdict, CONFIRM_RUNS)}`, cadence: m.cadence });
     }
   }
   return out;
@@ -34,21 +33,21 @@ export const undecidedOf = (el, later) => {
 // `unconfirmed`: the aspects the majority vote dropped; `reruns`: the re-measures (a missing target counts as none).
 export const clickRows = (label, first, unconfirmed, reruns) => {
   const rows = [];
-  const row = (check, detail) => rows.push({ kind: 'inconclusive', check, element: label, key: 'click', detail });
+  const row = (check, detail, cadence) => rows.push({ kind: 'inconclusive', check, element: label, key: 'click', detail, cadence });
   const asReruns = (pick) => reruns.map((x) => ({ saw: x[pick] ?? [], coverage: x.coverage ?? NO_COVERAGE }));
   const dropped = (name, list) => list.length > 0 && unconfirmed.includes(name);
   if (!(first.jumps.length > 0 && !dropped('jump', first.jumps))) {
-    if (first.unsure) row('jump', `a step in the transition could be a jump: ${sparseText(first.unsure)}`);
+    if (first.unsure) row('jump', `a step in the transition could be a jump: ${sparseText(first.unsure)}`, first.unsure);
     else if (dropped('jump', first.jumps) && first.jumpSightings.length) {
       const verdict = unconfirmedVerdict(first.jumpSightings, asReruns('jumps'));
-      if (verdict !== 'drop') row('jump', `a step in the transition could be a jump: ${undecidedReason(verdict, CONFIRM_RUNS)}`);
+      if (verdict !== 'drop') row('jump', `a step in the transition could be a jump: ${undecidedReason(verdict, CONFIRM_RUNS)}`, first.cadence);
     }
   }
   if (!(first.interrupt.length > 0 && !dropped('interrupt', first.interrupt))) {
-    if (first.interruptUnsure) row('interrupt-jump', `second click: the animation restarted but the value cannot be followed: ${sparseText(first.interruptUnsure)}`);
+    if (first.interruptUnsure) row('interrupt-jump', `second click: the animation restarted but the value cannot be followed: ${sparseText(first.interruptUnsure)}`, first.interruptUnsure);
     else if (dropped('interrupt', first.interrupt)) {
       const verdict = unconfirmedVerdict(first.interruptSightings, asReruns('interrupt'), { mark: true });
-      if (verdict !== 'drop') row('interrupt-jump', `second click: ${undecidedReason(verdict, CONFIRM_RUNS)}`);
+      if (verdict !== 'drop') row('interrupt-jump', `second click: ${undecidedReason(verdict, CONFIRM_RUNS)}`, first.cadence);
     }
   }
   return rows;
@@ -65,5 +64,5 @@ export const confirmToggle = (r, again) => {
 export const toggleRow = (r) => {
   if (r.jumps.length || !(r.undecided || r.unsure)) return null;
   const why = r.unsure ? `an animation restart cannot be followed: ${sparseText(r.unsure)}` : undecidedReason(r.undecided, CONFIRM_RUNS);
-  return { kind: 'inconclusive', check: 'not-interruptible', element: r.label, key: 'toggle', detail: `reversed part-way through its motion: ${why}` };
+  return { kind: 'inconclusive', check: 'not-interruptible', element: r.label, key: 'toggle', detail: `reversed part-way through its motion: ${why}`, cadence: r.unsure ?? r.cadence };
 };

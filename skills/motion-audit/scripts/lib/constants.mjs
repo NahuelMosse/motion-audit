@@ -86,9 +86,7 @@ export const JUMP_MAX_DT_MS = 2.5 * FRAME_MS;
 // slope of a smooth curve over an interval never exceeds its steepest slope), so a machine that renders
 // 30 fps with stalls up to this long still gets its teleports found.
 export const SERIES_JUMP_MAX_DT_MS = 6 * FRAME_MS;
-// A motion none of whose intervals exceeds this (two 60 Hz frames) was sampled densely: a step in it that is slower
-// than a jump is settled. One longer interval anywhere in the motion leaves its slow steps undecided.
-export const SERIES_DENSE_MAX_DT_MS = 2 * FRAME_MS;
+
 // An interval of a settled motion is a jump when it is a local speed peak (at least twice as fast as
 // both neighbours) and this many times faster than the average speed of the whole motion.
 export const SERIES_PEAK_SLOPE = 5;
@@ -153,3 +151,11 @@ export const NAMED_CONTROL = 'button, summary, [role=button]';
 export const LOGIN_PATH = /\/(log-?in|sign-?in|sign_in|auth|sso|session\/new)(\/|$|\?)/i;
 // A motion sampled fewer times than this is never examined for jumps (findJumps needs a start, a settle and room between).
 export const SIGHTING_MIN_SAMPLES = 5;
+
+// Frames at 60 Hz: a recording whose intervals have a median up to DENSE_MEDIAN_MS and none over DENSE_MAX_MS is dense. A step in
+// it that is slower than a jump is settled, and a row that says "too sparse" about it would be wrong. Product and tests share
+// these two numbers.
+export const DENSE_MEDIAN_MS = 20;
+export const DENSE_MAX_MS = 34;
+// A declared transition shorter than this cannot hold SIGHTING_MIN_SAMPLES frames at 60 Hz: its measured curve is not judged.
+export const MEASURE_MIN_MS = 120;

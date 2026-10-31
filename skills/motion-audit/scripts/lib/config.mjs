@@ -92,7 +92,7 @@ export const finalize = (raw, config, { devServer = false } = {}) => {
     if (f.kind === 'long-frame' && devServer) level = 'warning';
     level = config.severity[f.kind] ?? level;
     if (level === 'off') continue;
-    const full = { id, level, kind: f.kind, ...(f.check ? { check: f.check } : {}), element: f.element, detail: f.detail };
+    const full = { id, level, kind: f.kind, ...(f.check ? { check: f.check } : {}), element: f.element, detail: f.detail, ...(f.cadence ? { cadence: f.cadence } : {}) };
     const rule = config.ignore.find((r) => ignoreMatches(r, full));
     if (rule) suppressed.push({ ...full, reason: rule.reason });
     else findings.push(full);

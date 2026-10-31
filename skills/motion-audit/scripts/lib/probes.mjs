@@ -11,7 +11,7 @@ import { interruptionJumps, markCadence, restartUnfollowed } from './continuity.
 import { denyReason, describeElement, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
 import { analyzeRecording, animatedMove, median } from './series.mjs';
-import { MOVED_BY, NO_COVERAGE, coverageOf, isDense, mergeCoverage } from './sightings.mjs';
+import { NO_COVERAGE, coverageOf, isDense, mergeCoverage } from './sightings.mjs';
 
 const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source, flags: DENY_TEXT.flags, named: NAMED_CONTROL };
 const asElement = (jsHandle) => jsHandle.asElement();
@@ -94,7 +94,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   const rest = transition(await proxy.evaluate(readTransition));
   const el = { label, kind: info.kind, selected: info.selected, transition: rest, moments: {}, long: [], pressMode: real ? 'real' : 'forced', hoverOnly };
   const moment = async (name, before, beforePx, after, afterPx, run) => {
-    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), rootLabel: run.rec?.elems?.find((x) => x.root)?.label, motion: run.motion.map((e) => ({ ...e, moves: e.moves.map((m) => ({ ...m, scripted: !cssDriven(run.rec, e.id, m.prop) })) })), transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
+    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), rootLabel: run.rec?.elems?.find((x) => x.root)?.label, cadence: frameCadence(run.rec), motion: run.motion, transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
     el.long.push(...run.long.map((l) => ({ moment: name, ...l })));
   };
   // The element that shows the focus ring: a visually hidden input shows it on its sibling.
@@ -287,35 +287,22 @@ export const probeToggle = async (ctx, index) => {
 
 // Everything that moves for 1.5 s after a real click, with the tracer off for the long-frame pass
 // (tracing hundreds of nodes would itself overrun the frames it times) and on for the trajectories.
-// Whether the browser drives this property of this very element (by tracer id, not by label) with a running CSS
-// transition or animation that cannot teleport: continuous timing, no two keyframes at one offset with different
-// values, no cancel and no second keyframe animation on it in the window. Anything else may be a script, or a CSS
-// discontinuity, and is judged as script-driven motion.
-export const cssDriven = (rec, id, prop) => {
-  const names = MOVED_BY[prop] ?? [prop];
-  const own = (rec.anims ?? []).filter((x) => x.nodeId === id && x.props.some((p) => names.includes(p)));
-  const running = own.filter((x) => x.type === 'transition' || x.type === 'animation');
-  if (!running.length || running.some((x) => x.discontinuous)) return false;
-  if (own.some((x) => x.type === 'cancel') || running.filter((x) => x.type === 'animation').length > 1) return false;
-  return true;
-};
-
-// The jumps of script-driven motions in a recording, with how clear each was: a CSS transition or animation that cannot
-// teleport is never a candidate.
-export const jumpSightingsOf = (moved, rec) => moved.flatMap((e) => e.moves.filter((m) => m.jumps.length && !cssDriven(rec, e.id, m.prop)).map((m) => ({ label: e.label, prop: m.prop, dense: isDense(m.cadence) })));
+// The jumps seen in a recording, with how clear each was (whatever drives the motion).
+export const jumpSightingsOf = (moved) => moved.flatMap((e) => e.moves.filter((m) => m.jumps.length).map((m) => ({ label: e.label, prop: m.prop, dense: isDense(m.cadence) })));
 
 // The cadence of the step a click's jump check could not decide, or null: only script-driven motion (the browser
 // says a CSS transition or animation is one, and no teleport) whose step fell in intervals too long to judge.
-export const clickUnsure = (moved, rec) => moved.flatMap((e) => e.moves.filter((m) => !cssDriven(rec, e.id, m.prop)))
+export const clickUnsure = (moved) => moved.flatMap((e) => e.moves)
   .filter((m) => m.unresolved && m.cadence.max > CLICK_UNSURE_MAX_DT_MS).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null;
 
 // Median and longest interval between the frames recorded after the click: how well the recording could follow a value.
-export const recordingCadence = (rec) => {
-  const from = (rec.marks[0] ?? 0) - 2 * FRAME_MS;
-  const frames = [...new Set(rec.elems.flatMap((e) => e.t))].filter((x) => x >= from).sort((a, b) => a - b);
+// Median and longest interval (ms) between the frames of a recording from `from` on: how well it could follow a value.
+export const frameCadence = (rec, from = -Infinity) => {
+  const frames = [...new Set((rec?.elems ?? []).flatMap((e) => e.t))].filter((x) => x >= from).sort((a, b) => a - b);
   const dts = frames.slice(1).map((x, i) => x - frames[i]);
   return dts.length ? { median: Math.round(median(dts)), max: Math.round(Math.max(...dts)) } : null;
 };
+export const recordingCadence = (rec) => frameCadence(rec, (rec.marks[0] ?? 0) - 2 * FRAME_MS);
 
 export const clickMeasurer = (ctx, selector, interrupt) => {
   const { page, url } = ctx;
@@ -370,7 +357,7 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       // What this recording could see of each motion, and the jumps of script-driven motions (a CSS transition that cannot
       // teleport is never left undecided) with how clear each was.
       coverage: coverageOf(moved, { mark: rec.marks.length > 1 ? markCadence(rec, rec.marks[1]) : null }),
-      jumpSightings: jumpSightingsOf(moved, rec),
+      jumpSightings: jumpSightingsOf(moved),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
       interrupt: interruptJumps,

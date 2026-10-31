@@ -48,26 +48,13 @@ export const tracer = (cfg) => {
     return 'waapi';
   };
   const NOT_PROPS = new Set(['offset', 'easing', 'composite', 'computedOffset']);
-  // A CSS animation can still teleport: steps() or step-start timing, or two keyframes at one offset with different values.
-  const STEPPED = /steps\(|step-start|step-end|jump-/;
   const describeAnim = (a) => {
     const props = new Set();
     let explicitFrom = false;
-    const keyframes = a.effect?.getKeyframes?.() ?? [];
-    let discontinuous = STEPPED.test(String(a.effect?.getTiming?.().easing ?? ''));
-    const at = new Map();
-    for (const k of keyframes) {
-      if (STEPPED.test(String(k.easing ?? ''))) discontinuous = true;
-      for (const key of Object.keys(k)) {
-        if (NOT_PROPS.has(key)) continue;
-        props.add(key);
-        if (k.offset === 0) explicitFrom = true;
-        const slot = `${key}@${k.computedOffset ?? k.offset}`;
-        if (at.has(slot) && at.get(slot) !== String(k[key])) discontinuous = true;
-        at.set(slot, String(k[key]));
-      }
+    for (const k of a.effect?.getKeyframes?.() ?? []) {
+      for (const key of Object.keys(k)) if (!NOT_PROPS.has(key)) { props.add(key); if (k.offset === 0) explicitFrom = true; }
     }
-    return { props: [...props], explicitFrom, discontinuous };
+    return { props: [...props], explicitFrom };
   };
 
   const recs = new Map();

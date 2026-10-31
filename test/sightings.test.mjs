@@ -1,11 +1,12 @@
 // A jump seen in one recording that the re-measures do not reproduce is dropped only when a re-measure that could see that
-// very motion did not see it; otherwise it stays undecided, with a reason that names the cause.
+// very motion did not see it; otherwise it stays undecided, with a reason that names the cause. Nothing is exempt because of
+// what drives the motion (CSS or script).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fingerprint } from '../skills/motion-audit/scripts/lib/config.mjs';
 import { markCadence } from '../skills/motion-audit/scripts/lib/continuity.mjs';
 import { judgeElement } from '../skills/motion-audit/scripts/lib/judge.mjs';
-import { cssDriven, jumpSightingsOf } from '../skills/motion-audit/scripts/lib/probes.mjs';
+import { jumpSightingsOf } from '../skills/motion-audit/scripts/lib/probes.mjs';
 import { analyzeRecording } from '../skills/motion-audit/scripts/lib/series.mjs';
 import { NO_COVERAGE, canSee, coverageOf, unconfirmedVerdict } from '../skills/motion-audit/scripts/lib/sightings.mjs';
 import { clickRows, confirmToggle, toggleRow, undecidedOf } from '../skills/motion-audit/scripts/lib/undecided.mjs';
@@ -50,7 +51,7 @@ test('click wiring: a rerun without the motion, a sparse rerun or a target that 
   const first = (anims = []) => {
     const rec = recOf([el(7, 'div.thumb', frames(30, 40), teleport(30))], anims);
     const moved = analyzeRecording(rec);
-    return { jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))), jumpSightings: jumpSightingsOf(moved, rec), interrupt: [], interruptSightings: [], unsure: null, interruptUnsure: null, coverage: coverageOf(moved) };
+    return { jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))), jumpSightings: jumpSightingsOf(moved), interrupt: [], interruptSightings: [], unsure: null, interruptUnsure: null, coverage: coverageOf(moved) };
   };
   const f = first();
   assert.ok(f.jumps.length && f.jumpSightings.length, 'the sighting is real data');
@@ -73,25 +74,6 @@ test('click wiring: a rerun without the motion, a sparse rerun or a target that 
   const detail = clickRows('click #x', { ...f, jumpSightings: f.jumpSightings.map((s) => ({ ...s, dense: true })) }, ['jump'], [smooth, smooth])[0].detail;
   assert.match(detail, /seen in 1 of 3 recordings, not reproduced/);
   assert.doesNotMatch(detail, /too sparse/);
-});
-
-test('scriptDriven is decided per element and property, not per label or ancestor', () => {
-  const t = frames(30);
-  const thumb = el(7, 'div.thumb', t, teleport(30));
-  const anim = (over) => ({ t: 20, nodeId: 7, type: 'transition', props: ['transform'], explicitFrom: false, discontinuous: false, ...over });
-  const rec = (anims) => recOf([thumb], anims);
-  const sightings = (anims) => jumpSightingsOf(analyzeRecording(rec(anims)), rec(anims));
-  assert.equal(sightings([]).length, 1, 'no CSS animation: script-driven');
-  assert.equal(sightings([anim({})]).length, 0, 'the element itself has a continuous CSS transition on the property');
-  assert.equal(sightings([anim({ nodeId: 3 })]).length, 1, 'an animation of an ancestor does not exempt it');
-  assert.equal(sightings([anim({ props: ['opacity'] })]).length, 1, 'an animation of another property does not exempt it');
-  assert.equal(sightings([anim({ discontinuous: true })]).length, 1, 'steps() or discontinuous keyframes can teleport');
-  assert.equal(sightings([anim({ type: 'animation' }), anim({ type: 'animation' })]).length, 1, 'a restarted keyframe animation can teleport');
-  assert.equal(sightings([anim({}), anim({ type: 'cancel' })]).length, 1, 'a cancelled animation can teleport');
-  // another element with the same label is not the one with the CSS transition
-  const twin = recOf([thumb, el(9, 'div.thumb', t, t.map(() => 0))], [anim({ nodeId: 9 })]);
-  assert.equal(cssDriven(twin, 7, 'translateX'), false);
-  assert.equal(cssDriven(twin, 9, 'translateX'), true);
 });
 
 test('toggle wiring: a probe that returned no label or did not run cannot rule a restart out, and does not throw', () => {
@@ -129,8 +111,7 @@ test('hover wiring: an interrupt sighting is ruled out only by a probe that ran 
 });
 
 test('a hover jump sighting follows the same rule per gesture, label and property, for script-driven motion only', () => {
-  const t = frames(30);
-  const move = (over) => ({ prop: 'left', jumps: [{ atMs: 1, size: 9 }], samples: 20, unresolved: 0, cadence: { median: 17, max: 17 }, scripted: true, ...over });
+  const move = (over) => ({ prop: 'left', jumps: [{ atMs: 1, size: 9 }], samples: 20, unresolved: 0, cadence: { median: 17, max: 17 }, ...over });
   const gesture = (moves) => ({ unconfirmed: ['jump'], moments: { hover: { motion: [{ label: 'div.thumb', moves }] } } });
   const kinds = (first, later) => undecidedOf(first, later).map((u) => `${u.check} ${u.key}`);
   const same = gesture([move({ jumps: [], samples: 20 })]);
@@ -138,6 +119,7 @@ test('a hover jump sighting follows the same rule per gesture, label and propert
   assert.deepEqual(kinds(gesture([move({ cadence: { median: 17, max: 90 } })]), [gesture([]), null]), ['jump hover div.thumb left'], 'the motion is absent from the re-measures');
   assert.deepEqual(kinds(gesture([move({ cadence: { median: 17, max: 90 } })]), [gesture([move({ jumps: [], samples: 3 })]), null]), ['jump hover div.thumb left'], 'three samples are never examined');
   assert.deepEqual(kinds(gesture([move({})]), [same, same]), ['jump hover div.thumb left'], 'a clear step on dense frames that is not reproduced');
-  assert.deepEqual(kinds(gesture([move({ scripted: false })]), [gesture([]), null]), [], 'a CSS transition cannot teleport');
-  assert.ok(t.length);
+  // nothing is exempt because of what drives it: a focus move is judged by the same rule
+  const focus = { unconfirmed: ['jump'], moments: { focus: { motion: [{ label: 'div.ring', moves: [move({ prop: 'width' })] }] } } };
+  assert.deepEqual(kinds(focus, [gesture([]), null]), ['jump focus div.ring width']);
 });

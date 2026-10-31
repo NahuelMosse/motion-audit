@@ -1,5 +1,5 @@
 // Pure trajectory analysis: one property sampled over time, curve classification, jump detection.
-import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, SERIES_DENSE_MAX_DT_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_FRAMES } from './constants.mjs';
+import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, DENSE_MAX_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_FRAMES } from './constants.mjs';
 
 export const round = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
 export const median = (a) => {
@@ -63,13 +63,13 @@ export const unwrap = (v) => v.reduce((out, x, i) => {
 // speed of the whole motion (no easing curve peaks that high after its first interval) and than
 // both short neighbours. The first interval is skipped: an ease-out legitimately starts fastest.
 // `unresolved` counts steps that pass every test but the speed one, in a motion some interval of which is longer
-// than SERIES_DENSE_MAX_DT_MS (or in an interval too long to bound the velocity): the speed test cannot decide them.
+// than DENSE_MAX_MS (or in an interval too long to bound the velocity): the speed test cannot decide them.
 const findJumps = (t, v, start, settle, amp, t0, shape) => {
   const jumps = [];
   let unresolved = 0;
   if (settle - start < 4) return { jumps, unresolved };
   const avgVelocity = amp / Math.max(1, t[settle] - t0);
-  const dense = t.slice(start, settle + 1).every((x, i) => x - t[start + i - 1] <= SERIES_DENSE_MAX_DT_MS);
+  const dense = t.slice(start, settle + 1).every((x, i) => x - t[start + i - 1] <= DENSE_MAX_MS);
   const peak = SERIES_PEAK_SLOPE * (shape === 'spring' ? 2 : 1);
   const velocity = (k) => {
     const dt = t[k] - t[k - 1];
@@ -189,7 +189,7 @@ export const analyzeElement = (el, longFrames = []) => {
     const r = analyzeSeries(el.t, c === 'rot' ? unwrap(el[c]) : el[c], EPS[PROP_OF[c]], el.cuts, longFrames);
     if (r) moves.push({ prop: PROP_OF[c], ...r });
   }
-  return moves.length ? { label: el.label, id: el.id, root: el.root, moves } : null;
+  return moves.length ? { label: el.label, root: el.root, moves } : null;
 };
 
 const kindOf = (e) => `${e.tag ?? e.label.replace(/[#.].*$/, '').toUpperCase()}|${e.role ?? ''}`;
