@@ -108,7 +108,9 @@ test('orders: motion', async ({ page }) => {
 
 `audit(pageOrUrl, options)` takes a Playwright `page` (its `baseURL` and `storageState` apply) or a URL
 (options: `only`, `max`, `cpu`, `click`, `interrupt`, `interact`, `frames`, `entrances`, `config`,
-`baseline`, `storageState`, `waitFor`, `allowRedirect`, `out`). Or from the shell, failing on new findings only:
+`baseline`, `storageState`, `waitFor`, `allowRedirect`, `out`). With a `page`, the CPU throttle is
+removed, the CDP session detached and the tracer stopped and unregistered when the audit ends. Or from
+the shell, failing on new findings only:
 
 ```bash
 npx motion-audit "$APP_URL/orders" --max 200 --min-coverage 0.8 --baseline motion-baseline.json

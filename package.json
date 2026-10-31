@@ -23,6 +23,7 @@
     "fixtures": "node test/helpers/fixture-runs.mjs 3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.43",
     "playwright": "^1.43"
   }
 }

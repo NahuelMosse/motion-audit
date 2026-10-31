@@ -195,6 +195,11 @@ Or the CLI: `npx motion-audit http://localhost:3000/orders --max 200 --min-cover
 - `not-interruptible` and `interrupt-jump` rely on Animation objects (keyframe restarts, cancelled
   animations) at any sampling density; for JS-driven motion (rAF, spring libraries) a teleport is only
   detected when frames are sampled about every 16 ms, so a slow or throttled run can miss a small one.
+- A component re-mounted mid-animation (a changed React `key`) is seen when the old node and the new one
+  have the same tag and role, share a parent and are one to four frames apart; other replacements are
+  separate series.
+- Long frames are the page's own: the time of the audit's injected scripts (the tracer, `page.evaluate`)
+  is taken out of each frame, so a heavy page under heavy machine load can still show an unattributed one.
 - Shadow DOM and iframes are not entered; canvas and WebGL motion is not measured.
 - Durations are compared within the same element kind (`button`, `a`, `tab`...): put deliberate
   differences in `tokens.durations` or ignore them with a reason.

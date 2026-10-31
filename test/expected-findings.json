@@ -13,7 +13,6 @@
       "error|reduced-motion-loop:6467bc4498|div.ticker",
       "error|reduced-motion-moves:ebccd1e2ec|button \"Card\" in main",
       "warning|duration:055fd5eeec|button \"Closed\" in main",
-      "warning|duration:8fbcb53835|button \"Save\" in main",
       "warning|duration:9dbf14ff23|button \"Save\" in main",
       "warning|duration:b543f10267|button \"Save\" in main",
       "warning|inconsistent-duration:5e865d44aa|button press",
@@ -38,7 +37,6 @@
       "error|reduced-motion-loop:6467bc4498|div.ticker",
       "error|reduced-motion-moves:ebccd1e2ec|button \"Card\" in main",
       "warning|duration:055fd5eeec|button \"Closed\" in main",
-      "warning|duration:8fbcb53835|button \"Save\" in main",
       "warning|duration:9dbf14ff23|button \"Save\" in main",
       "warning|duration:b543f10267|button \"Save\" in main",
       "warning|inconsistent-duration:5e865d44aa|button press",
@@ -66,7 +64,6 @@
       "error|reduced-motion-loop:6467bc4498|div.ticker",
       "error|reduced-motion-moves:ebccd1e2ec|button \"Card\" in main",
       "warning|duration:055fd5eeec|button \"Closed\" in main",
-      "warning|duration:8fbcb53835|button \"Save\" in main",
       "warning|duration:9dbf14ff23|button \"Save\" in main",
       "warning|duration:b543f10267|button \"Save\" in main",
       "warning|inconsistent-duration:5e865d44aa|button press",
@@ -126,6 +123,7 @@
     "exit": 0,
     "findings": [
       "warning|no-feedback:6a82ee342a|a \"Read the docs\"",
+      "warning|no-press-feedback:d70ef5b48b|button \"Save changes\"",
       "warning|transition-all:bf85ca1b0c|button \"Save changes\""
     ]
   },
@@ -141,6 +139,7 @@
       "error|ease-in:fd096ad904|button \"JS ease-in\"",
       "error|reduced-motion-moves:c919298961|button \"JS ease-in\"",
       "warning|linear:1e2e04b872|button \"Linear lift\"",
+      "warning|no-press-feedback:bc3d015cb6|button \"Linear lift\"",
       "warning|reduced-motion-missing:31eb08e79c|stylesheets",
       "warning|snaps:61ca9533bf|button \"JS ease-in\"",
       "warning|ungated-hover:2655251950|.lin:hover"
@@ -176,6 +175,81 @@
     "exit": 1,
     "findings": [
       "error|interrupt-jump:95c8a8d247|click #toggle"
+    ]
+  },
+  "table-toast-cpu4": {
+    "exit": 0,
+    "findings": []
+  },
+  "overlay-portal-cpu4": {
+    "exit": 1,
+    "findings": [
+      "error|layout-animated:1fed37dd56|click #open"
+    ]
+  },
+  "relayout-hover": {
+    "exit": 1,
+    "findings": [
+      "error|long-frame:8847e7193e|button#density \"Density\"",
+      "error|long-frame:c26642dc52|button#density \"Density\"",
+      "error|long-frame:fae685ea21|button#density \"Density\""
+    ]
+  },
+  "toast-teleport": {
+    "exit": 1,
+    "findings": [
+      "error|jump:70671524fe|click #show"
+    ]
+  },
+  "remount": {
+    "exit": 1,
+    "findings": [
+      "error|jump:25f415087c|click #open",
+      "error|layout-animated:9f0d471da4|click #open"
+    ]
+  },
+  "pixel-noise": {
+    "exit": 1,
+    "findings": [
+      "error|no-feedback:a716eaded3|button \"Nothing visible changes\"",
+      "warning|no-press-feedback:9dbc922b6c|button \"Nothing visible changes\""
+    ]
+  },
+  "dangerous-interact": {
+    "exit": 0,
+    "findings": [
+      "warning|reduced-motion-missing:31eb08e79c|stylesheets"
+    ]
+  },
+  "pin-list-interact": {
+    "exit": 0,
+    "findings": [
+      "warning|reduced-motion-missing:31eb08e79c|stylesheets"
+    ]
+  },
+  "interact-release": {
+    "exit": 0,
+    "findings": [
+      "warning|reduced-motion-missing:31eb08e79c|stylesheets"
+    ]
+  },
+  "side-effects": {
+    "exit": 0,
+    "findings": [
+      "warning|reduced-motion-missing:31eb08e79c|stylesheets"
+    ]
+  },
+  "late-controls-waited": {
+    "exit": 0,
+    "findings": [
+      "warning|reduced-motion-missing:31eb08e79c|stylesheets"
+    ]
+  },
+  "shadcn-fixed": {
+    "exit": 0,
+    "findings": [
+      "warning|no-feedback:6a82ee342a|a \"Read the docs\"",
+      "warning|no-press-feedback:d70ef5b48b|button \"Save changes\""
     ]
   }
 }

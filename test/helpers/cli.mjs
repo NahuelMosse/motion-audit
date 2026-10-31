@@ -30,6 +30,18 @@ export const runCli = (args, { cli = CLI, cwd = ROOT, env = {}, timeoutMs = 6000
   });
 });
 
+// Runs a Node script with the same scratch temp directory and returns { code, stdout, stderr }.
+export const runNode = (args, { cwd = ROOT, env = {}, timeoutMs = 600000 } = {}) => new Promise((resolve, reject) => {
+  const child = spawn(process.execPath, args, { cwd, env: { ...process.env, TEMP: scratchDir(), TMP: scratchDir(), TMPDIR: scratchDir(), ...env } });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (d) => { stdout += d; });
+  child.stderr.on('data', (d) => { stderr += d; });
+  const timer = setTimeout(() => { child.kill(); reject(new Error(`timed out after ${timeoutMs} ms: ${args.join(' ')}\n${stdout}\n${stderr}`)); }, timeoutMs);
+  child.on('error', (e) => { clearTimeout(timer); reject(e); });
+  child.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
+});
+
 // The set of finding fingerprints as readable "level kind element" strings, sorted.
 export const kindsOf = (report) => [...new Set(report.findings.map((f) => `${f.level} ${f.kind}`))].sort();
 export const idsOf = (report) => report.findings.map((f) => f.id).sort();
