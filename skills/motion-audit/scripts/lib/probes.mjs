@@ -11,7 +11,7 @@ import { interruptionJumps, markCadence, restartUnfollowed } from './continuity.
 import { denyReason, describeElement, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
 import { analyzeRecording, animatedMove, median } from './series.mjs';
-import { NO_COVERAGE, coverageOf, isDense, mergeCoverage } from './sightings.mjs';
+import { MOVED_BY, NO_COVERAGE, coverageOf, isDense, mergeCoverage } from './sightings.mjs';
 
 const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source, flags: DENY_TEXT.flags, named: NAMED_CONTROL };
 const asElement = (jsHandle) => jsHandle.asElement();
@@ -94,7 +94,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   const rest = transition(await proxy.evaluate(readTransition));
   const el = { label, kind: info.kind, selected: info.selected, transition: rest, moments: {}, long: [], pressMode: real ? 'real' : 'forced', hoverOnly };
   const moment = async (name, before, beforePx, after, afterPx, run) => {
-    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), motion: run.motion.map((e) => ({ ...e, moves: e.moves.map((m) => ({ ...m, scripted: !cssDriven(run.rec, e.id, m.prop) })) })), transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
+    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), rootLabel: run.rec?.elems?.find((x) => x.root)?.label, motion: run.motion.map((e) => ({ ...e, moves: e.moves.map((m) => ({ ...m, scripted: !cssDriven(run.rec, e.id, m.prop) })) })), transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
     el.long.push(...run.long.map((l) => ({ moment: name, ...l })));
   };
   // The element that shows the focus ring: a visually hidden input shows it on its sibling.
@@ -287,16 +287,6 @@ export const probeToggle = async (ctx, index) => {
 
 // Everything that moves for 1.5 s after a real click, with the tracer off for the long-frame pass
 // (tracing hundreds of nodes would itself overrun the frames it times) and on for the trajectories.
-// The CSS properties (as the tracer reports a keyframe's) whose animation moves a measured property. A transform moves
-// the box, so it also moves the measured position and size.
-const TRANSFORM = ['transform', 'translate', 'scale', 'rotate'];
-const MOVED_BY = {
-  translateX: TRANSFORM, translateY: TRANSFORM, scaleX: TRANSFORM, scaleY: TRANSFORM, rotate: TRANSFORM, opacity: ['opacity'],
-  left: [...TRANSFORM, 'left', 'right', 'inset', 'marginLeft', 'marginRight'], top: [...TRANSFORM, 'top', 'bottom', 'inset', 'marginTop', 'marginBottom'],
-  width: [...TRANSFORM, 'width', 'minWidth', 'maxWidth', 'flex', 'padding', 'paddingLeft', 'paddingRight'], height: [...TRANSFORM, 'height', 'minHeight', 'maxHeight', 'flex', 'padding', 'paddingTop', 'paddingBottom'],
-  layoutWidth: ['width', 'minWidth', 'maxWidth', 'flex', 'padding', 'paddingLeft', 'paddingRight'], layoutHeight: ['height', 'minHeight', 'maxHeight', 'flex', 'padding', 'paddingTop', 'paddingBottom'],
-};
-
 // Whether the browser drives this property of this very element (by tracer id, not by label) with a running CSS
 // transition or animation that cannot teleport: continuous timing, no two keyframes at one offset with different
 // values, no cancel and no second keyframe animation on it in the window. Anything else may be a script, or a CSS

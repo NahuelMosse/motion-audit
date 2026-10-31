@@ -111,3 +111,39 @@ test('a declared ease-in whose sparse measured curve was fitted as something els
   assert.deepEqual(judged(move(5))[0].check, 'ease-in');
   assert.deepEqual(judged(move(36)), []);
 });
+
+// Every path from a declared ease-in to "no measured row" ends in the ease-in or in an inconclusive row with its fingerprint.
+test('a declared ease-in: the measured ease-in is ruled out only by a recording that fitted that motion', async () => {
+  const { analyzeRecording } = await import('../skills/motion-audit/scripts/lib/series.mjs');
+  const { FRAME, txElement } = await import('./helpers/curves.mjs');
+  const { fingerprint } = await import('../skills/motion-audit/scripts/lib/config.mjs');
+  const LABEL = 'button.save';
+  const frames = (n, step = FRAME) => Array.from({ length: n }, (_, i) => (i - 2) * step);
+  const motionOf = (times, curve, extra = {}) => analyzeRecording({ elems: [txElement(times, times.map((t) => (t <= 0 ? 0 : curve(t))), { root: true, label: LABEL, ...extra })], anims: [], marks: [] });
+  const judged = (motion, changed = ['transform'], easing = 'ease-in', props = changed) => judgeElement(element({
+    transition: transition(props, 600, easing),
+    moments: { press: moment({ changed, rootLabel: LABEL, transition: transition(props, 600, easing), motion }) },
+  })).filter((f) => f.key === `measured ${LABEL}`);
+  const hash = (f) => fingerprint(f).split(':')[1];
+  const finding = hash({ kind: 'ease-in', element: 'button "Save"', key: `measured ${LABEL}` });
+  const easeIn = (t) => 300 * Math.min(1, t / 600) ** 3;
+  // 60 Hz: the ease-in is measured
+  assert.deepEqual(judged(motionOf(frames(45), easeIn)).map((f) => f.kind), ['ease-in']);
+  // too few samples to produce a move at all (the recording kept three frames), or a re-record that has no such motion
+  for (const motion of [motionOf(frames(3, 100), easeIn), [], motionOf(frames(45), () => 0)]) {
+    const rows = judged(motion);
+    assert.equal(rows.length, 1, JSON.stringify(motion));
+    assert.equal(rows[0].kind, 'inconclusive');
+    assert.equal(hash(rows[0]), finding);
+  }
+  // another property moved while the declared one was not recorded
+  const opacity = motionOf(frames(45), easeIn).map((e) => ({ ...e, moves: e.moves.map((m) => ({ ...m, prop: 'opacity' })) }));
+  // (the measured curve of that other property is an ease-in row of its own; the undecided row for the declared one is dropped by finalize)
+  assert.ok(judged(opacity).some((f) => f.kind === 'inconclusive' && hash(f) === finding));
+  // a fit on enough dense samples that is not an ease-in rules it out
+  assert.deepEqual(judged(motionOf(frames(45), (t) => 300 * (1 - (1 - Math.min(1, t / 600)) ** 3))), []);
+  // a declared ease-in on something the tracer does not measure (a colour) asks nothing of the recording
+  assert.deepEqual(judged([], ['background-color']), []);
+  // a declared ease-out asks nothing either
+  assert.deepEqual(judged([], ['transform'], 'cubic-bezier(0.23, 1, 0.32, 1)'), []);
+});

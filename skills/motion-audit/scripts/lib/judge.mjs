@@ -1,6 +1,8 @@
 // Turns what was measured on one element into findings. Pure: no browser, no config file.
 import { BANDS, EASE_IN_MIN_MS, FRAME_MS, INCONSISTENT_MIN_GAP_MS, INCONSISTENT_RATIO, LAYOUT_PROPS, SPARSE_DENSITY } from './constants.mjs';
 import { animatedMove, easingKind } from './series.mjs';
+import { measuredFor } from './sightings.mjs';
+import { SIGHTING_MIN_SAMPLES } from './constants.mjs';
 
 // The declared duration and easing of the transition that animates `prop`, or null if none does.
 export const transitionOf = (tr, prop) => {
@@ -62,10 +64,21 @@ export const judgeElement = (el, policy = {}) => {
     }
     // The stylesheet says this gesture eases in: its own measured motion, sampled too sparsely to be fitted, cannot
     // rule that out, so it stays visible as undecided (never nothing).
-    const declaredEaseIn = animated.some((p) => easingKind(transitionOf(tr, p).easing) === 'ease-in');
+    // The measured ease-in of the control is ruled out only by a recording that saw its own motion of a declared property
+    // with enough samples, densely enough, to fit a curve: no motion recorded, too few samples or sparse ones decide nothing.
+    const wanted = new Set(animated.filter((p) => easingKind(transitionOf(tr, p).easing) === 'ease-in').flatMap(measuredFor));
+    if (wanted.size) {
+      const root = d.motion.find((e) => e.root);
+      const label = d.rootLabel ?? root?.label;
+      const mine = (root?.moves ?? []).filter((m) => wanted.has(m.prop));
+      const fitted = (m) => m.samples >= SIGHTING_MIN_SAMPLES && m.samples / (m.durationMs / FRAME_MS) >= SPARSE_DENSITY && !m.easeInTie;
+      if (label && !mine.some((m) => (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) || fitted(m))) {
+        const worst = mine.map((m) => m.cadence).sort((x, y) => y.max - x.max)[0];
+        if (worst) unsure('ease-in', `${moment}: ${label} is declared to ease in, the measured curve cannot confirm it`, `measured ${label}`, worst);
+        else add('inconclusive', `${moment}: ${label} is declared to ease in and its motion was not recorded with enough samples to fit a curve`, `ease-in measured ${label}`, undefined, { check: 'ease-in', key: `measured ${label}` });
+      }
+    }
     for (const e of d.motion) for (const m of e.moves) {
-      const sparse = m.samples / (m.durationMs / FRAME_MS) < SPARSE_DENSITY;
-      if (declaredEaseIn && e.root && sparse && m.shape !== 'ease-in' && !m.easeInTie && m.durationMs > EASE_IN_MIN_MS && animatedMove(m)) unsure('ease-in', `${moment}: ${e.label} ${m.prop} is declared to ease in, the measured curve cannot confirm it`, `measured ${e.label}`, m.cadence);
       if (m.easeInTie && m.durationMs > EASE_IN_MIN_MS && m.samples / (m.durationMs / FRAME_MS) < SPARSE_DENSITY) unsure('ease-in', `${moment}: ${e.label} ${m.prop} may ease in`, `measured ${e.label}`, m.cadence);
       if (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) add('ease-in', `${moment}: ${e.label} ${m.prop} measured ease-in over ${m.durationMs} ms`, `measured ${e.label}`);
       for (const j of m.jumps) add('jump', `${moment}: ${e.label} ${m.prop} jumps ${j.size} at ${j.atMs} ms`, `${moment} ${e.label} ${m.prop}`);

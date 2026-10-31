@@ -57,3 +57,18 @@ export const unconfirmedVerdict = (sightings, reruns, opts = {}) => {
 export const undecidedReason = (cause, runs) => (cause === 'flake'
   ? `seen in 1 of ${runs} recordings, not reproduced`
   : `seen in 1 of ${runs} recordings; the others could not judge that motion (frames too sparse, or it was not there)`);
+
+// The CSS properties (as the tracer reports a keyframe's) whose animation moves a measured property. A transform moves
+// the box, so it also moves the measured position and size.
+const TRANSFORM = ['transform', 'translate', 'scale', 'rotate'];
+export const MOVED_BY = {
+  translateX: TRANSFORM, translateY: TRANSFORM, scaleX: TRANSFORM, scaleY: TRANSFORM, rotate: TRANSFORM, opacity: ['opacity'],
+  left: [...TRANSFORM, 'left', 'right', 'inset', 'marginLeft', 'marginRight'], top: [...TRANSFORM, 'top', 'bottom', 'inset', 'marginTop', 'marginBottom'],
+  width: [...TRANSFORM, 'width', 'minWidth', 'maxWidth', 'flex', 'padding', 'paddingLeft', 'paddingRight'], height: [...TRANSFORM, 'height', 'minHeight', 'maxHeight', 'flex', 'padding', 'paddingTop', 'paddingBottom'],
+  layoutWidth: ['width', 'minWidth', 'maxWidth', 'flex', 'padding', 'paddingLeft', 'paddingRight'], layoutHeight: ['height', 'minHeight', 'maxHeight', 'flex', 'padding', 'paddingTop', 'paddingBottom'],
+};
+
+
+// The measured properties a CSS property moves (a declared `width` shows as width and layoutWidth; a `transform` as its parts).
+const camel = (name) => name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+export const measuredFor = (cssProp) => Object.keys(MOVED_BY).filter((m) => MOVED_BY[m].includes(camel(cssProp)));
