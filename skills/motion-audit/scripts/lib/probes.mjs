@@ -2,7 +2,7 @@
 import { join } from 'node:path';
 import {
   CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, PRESS_GUARD_MS, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
-  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, CLICK_UNSURE_MAX_DT_MS, SERIES_DENSE_MAX_DT_MS, SERIES_JUMP_MAX_DT_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
+  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, CLICK_UNSURE_MAX_DT_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
   REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
@@ -11,6 +11,7 @@ import { interruptionJumps, markCadence, restartUnfollowed } from './continuity.
 import { denyReason, describeElement, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
 import { analyzeRecording, animatedMove, median } from './series.mjs';
+import { NO_COVERAGE, coverageOf, isDense, mergeCoverage } from './sightings.mjs';
 
 const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source, flags: DENY_TEXT.flags, named: NAMED_CONTROL };
 const asElement = (jsHandle) => jsHandle.asElement();
@@ -93,7 +94,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   const rest = transition(await proxy.evaluate(readTransition));
   const el = { label, kind: info.kind, selected: info.selected, transition: rest, moments: {}, long: [], pressMode: real ? 'real' : 'forced', hoverOnly };
   const moment = async (name, before, beforePx, after, afterPx, run) => {
-    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), motion: run.motion.map((e) => ({ ...e, scripted: scriptDriven(run.rec, e.label) })), transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
+    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), motion: run.motion.map((e) => ({ ...e, moves: e.moves.map((m) => ({ ...m, scripted: !cssDriven(run.rec, e.id, m.prop) })) })), transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
     el.long.push(...run.long.map((l) => ({ moment: name, ...l })));
   };
   // The element that shows the focus ring: a visually hidden input shows it on its sibling.
@@ -162,8 +163,11 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         const frames = longWindows(await page.evaluate(() => window.__mt.loaf), interruptFrom, unattributedLimit(page));
         el.interrupt = rec?.marks.length ? interruptionJumps(rec, rec.marks[0], { durationMs: hoverMs, small: true, longFrames: frames }) : [];
         el.interruptUnsure = rec?.marks.length && !el.interrupt.length ? restartUnfollowed(rec, rec.marks[0]) : null;
-        el.interruptCadence = rec?.marks.length ? markCadence(rec, rec.marks[0]) : null;
-        el.interruptDense = Boolean(el.interrupt.length) && (markCadence(rec, rec.marks[0])?.max ?? Infinity) <= SERIES_DENSE_MAX_DT_MS;
+        const around = rec?.marks.length ? markCadence(rec, rec.marks[0]) : null;
+        el.interruptCadence = around;
+        // What this recording could see of the second gesture, and how clear each sighting was.
+        el.interruptCoverage = rec?.marks.length ? coverageOf(analyzeRecording(rec), { mark: around }) : NO_COVERAGE;
+        el.interruptSightings = el.interrupt.map((j) => ({ label: j.label, prop: j.prop, dense: isDense(around) }));
         if (!el.interruptUnsure) break;
       }
     }
@@ -244,6 +248,7 @@ export const probeToggle = async (ctx, index) => {
   let dense = true;
   let unsure = null;
   let cadence = null;
+  let coverage = { ran: true, mark: null, moves: [] };
   let dur = 0;
   try {
     const first = await run(['click', 'settle']);
@@ -255,8 +260,9 @@ export const probeToggle = async (ctx, index) => {
         const found = interruptionJumps(rec, mark, { durationMs: dur });
         const around = markCadence(rec, mark);
         for (const j of found) jumps.push({ ...j, direction });
-        if (found.length) { sighted = true; if (!(around && around.max <= SERIES_DENSE_MAX_DT_MS)) dense = false; } else unsure ??= restartUnfollowed(rec, mark);
+        if (found.length) { sighted = true; if (!isDense(around)) dense = false; } else unsure ??= restartUnfollowed(rec, mark);
         cadence ??= around;
+        coverage = mergeCoverage(coverage, coverageOf(analyzeRecording(rec), { mark: around }));
       };
       await run(['click', 'settle']); // back to the starting state
       for (const share of TOGGLE_SHARES) {
@@ -267,31 +273,50 @@ export const probeToggle = async (ctx, index) => {
       }
     } else await run(['click', 'settle']); // no motion: still return to the starting state
   } catch (e) {
+    coverage = { ...coverage, ran: false };
     ctx.notes.push(`toggle ${label} stopped: ${e.message.split('\n')[0]}`);
   } finally {
     if (clicks % 2) await click().catch((e) => ctx.notes.push(`could not restore toggle ${label}: ${e.message.split('\n')[0]}`));
   }
   jumps.sort((x, y) => y.delta - x.delta);
-  return { label, dur, jumps, unsure, cadence, dense: sighted && dense };
+  const sightings = [...new Map(jumps.map((j) => [`${j.label}|${j.prop}`, { label: j.label, prop: j.prop, dense: sighted && dense }])).values()];
+  return { label, dur, jumps, sightings, coverage, unsure, cadence, dense: sighted && dense };
 };
 
 // ---------- --click <selector> ----------
 
 // Everything that moves for 1.5 s after a real click, with the tracer off for the long-frame pass
 // (tracing hundreds of nodes would itself overrun the frames it times) and on for the trajectories.
-// Whether no CSS transition, CSS animation or Web Animation covers the element (or an ancestor) in a recording.
-const scriptDriven = (rec, label) => {
-  const byId = new Map(rec.elems.map((x) => [x.id, x]));
-  return rec.elems.filter((x) => x.label === label).every((x) => {
-    const chain = new Set();
-    for (let n = x, guard = 0; n && guard < 64; n = byId.get(n.parent), guard++) chain.add(n.id);
-    return !(rec.anims ?? []).some((a) => chain.has(a.nodeId));
-  });
+// The CSS properties (as the tracer reports a keyframe's) whose animation moves a measured property. A transform moves
+// the box, so it also moves the measured position and size.
+const TRANSFORM = ['transform', 'translate', 'scale', 'rotate'];
+const MOVED_BY = {
+  translateX: TRANSFORM, translateY: TRANSFORM, scaleX: TRANSFORM, scaleY: TRANSFORM, rotate: TRANSFORM, opacity: ['opacity'],
+  left: [...TRANSFORM, 'left', 'right', 'inset', 'marginLeft', 'marginRight'], top: [...TRANSFORM, 'top', 'bottom', 'inset', 'marginTop', 'marginBottom'],
+  width: [...TRANSFORM, 'width', 'minWidth', 'maxWidth', 'flex', 'padding', 'paddingLeft', 'paddingRight'], height: [...TRANSFORM, 'height', 'minHeight', 'maxHeight', 'flex', 'padding', 'paddingTop', 'paddingBottom'],
+  layoutWidth: ['width', 'minWidth', 'maxWidth', 'flex', 'padding', 'paddingLeft', 'paddingRight'], layoutHeight: ['height', 'minHeight', 'maxHeight', 'flex', 'padding', 'paddingTop', 'paddingBottom'],
 };
+
+// Whether the browser drives this property of this very element (by tracer id, not by label) with a running CSS
+// transition or animation that cannot teleport: continuous timing, no two keyframes at one offset with different
+// values, no cancel and no second keyframe animation on it in the window. Anything else may be a script, or a CSS
+// discontinuity, and is judged as script-driven motion.
+export const cssDriven = (rec, id, prop) => {
+  const names = MOVED_BY[prop] ?? [prop];
+  const own = (rec.anims ?? []).filter((x) => x.nodeId === id && x.props.some((p) => names.includes(p)));
+  const running = own.filter((x) => x.type === 'transition' || x.type === 'animation');
+  if (!running.length || running.some((x) => x.discontinuous)) return false;
+  if (own.some((x) => x.type === 'cancel') || running.filter((x) => x.type === 'animation').length > 1) return false;
+  return true;
+};
+
+// The jumps of script-driven motions in a recording, with how clear each was: a CSS transition or animation that cannot
+// teleport is never a candidate.
+export const jumpSightingsOf = (moved, rec) => moved.flatMap((e) => e.moves.filter((m) => m.jumps.length && !cssDriven(rec, e.id, m.prop)).map((m) => ({ label: e.label, prop: m.prop, dense: isDense(m.cadence) })));
 
 // The cadence of the step a click's jump check could not decide, or null: only script-driven motion (the browser
 // says a CSS transition or animation is one, and no teleport) whose step fell in intervals too long to judge.
-export const clickUnsure = (moved, rec) => moved.filter((e) => scriptDriven(rec, e.label)).flatMap((e) => e.moves)
+export const clickUnsure = (moved, rec) => moved.flatMap((e) => e.moves.filter((m) => !cssDriven(rec, e.id, m.prop)))
   .filter((m) => m.unresolved && m.cadence.max > CLICK_UNSURE_MAX_DT_MS).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null;
 
 // Median and longest interval between the frames recorded after the click: how well the recording could follow a value.
@@ -300,24 +325,6 @@ export const recordingCadence = (rec) => {
   const frames = [...new Set(rec.elems.flatMap((e) => e.t))].filter((x) => x >= from).sort((a, b) => a - b);
   const dts = frames.slice(1).map((x, i) => x - frames[i]);
   return dts.length ? { median: Math.round(median(dts)), max: Math.round(Math.max(...dts)) } : null;
-};
-
-// Whether a recording could judge the jump of every motion in it: no step left unresolved and no interval over the
-// limit within which a velocity is bounded.
-export const decidable = (moved) => moved.every((e) => e.moves.every((m) => !m.unresolved && m.cadence.max <= SERIES_JUMP_MAX_DT_MS));
-
-// Whether every motion that showed a jump was sampled frame by frame (no interval over two 60 Hz frames): a clear jump.
-export const sightedDense = (moved) => {
-  const seen = moved.flatMap((e) => e.moves).filter((m) => m.jumps.length);
-  return seen.length > 0 && seen.every((m) => m.cadence.max <= SERIES_DENSE_MAX_DT_MS);
-};
-
-// What a jump seen in one recording and not confirmed by the re-measures becomes. A re-measure that did not see it
-// and could judge the motion is a decided negative: a sighting in sparse frames is then dropped. A clear sighting in
-// dense frames that is not reproduced stays undecided (a flake), and so does one whose re-measures could not judge.
-export const unconfirmedVerdict = (first, reruns) => {
-  if (first.sightedDense) return 'inconclusive';
-  return reruns.some((r) => !r.jumps.length && r.decidable) ? 'drop' : 'inconclusive';
 };
 
 export const clickMeasurer = (ctx, selector, interrupt) => {
@@ -370,16 +377,16 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       // A step the frames were too sparse to judge, with no jump found in any recording: the check is undecided.
       unsure: clickUnsure(moved, rec),
       cadence: recordingCadence(rec),
-      decidable: decidable(moved),
-      // The browser says a CSS transition or animation cannot teleport: only a script-driven sighting can stay undecided.
-      jumpScripted: moved.filter((e) => e.moves.some((m) => m.jumps.length)).some((e) => scriptDriven(rec, e.label)),
-      sightedDense: sightedDense(moved),
+      // What this recording could see of each motion, and the jumps of script-driven motions (a CSS transition that cannot
+      // teleport is never left undecided) with how clear each was.
+      coverage: coverageOf(moved, { mark: rec.marks.length > 1 ? markCadence(rec, rec.marks[1]) : null }),
+      jumpSightings: jumpSightingsOf(moved, rec),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
       interrupt: interruptJumps,
       // The second click could not be judged (a restart the frames cannot follow), and how clear a sighting was.
       interruptUnsure: interrupt && rec.marks.length > 1 && !interruptJumps.length ? restartUnfollowed(rec, rec.marks[1]) : null,
-      interruptDense: interruptJumps.length > 0 && (markCadence(rec, rec.marks[1])?.max ?? Infinity) <= SERIES_DENSE_MAX_DT_MS,
+      interruptSightings: interruptJumps.map((j) => ({ label: j.label, prop: j.prop, dense: isDense(rec.marks.length > 1 ? markCadence(rec, rec.marks[1]) : null) })),
       mounted: rec.mounted,
     };
   };

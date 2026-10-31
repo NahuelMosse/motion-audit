@@ -189,7 +189,7 @@ export const analyzeElement = (el, longFrames = []) => {
     const r = analyzeSeries(el.t, c === 'rot' ? unwrap(el[c]) : el[c], EPS[PROP_OF[c]], el.cuts, longFrames);
     if (r) moves.push({ prop: PROP_OF[c], ...r });
   }
-  return moves.length ? { label: el.label, root: el.root, moves } : null;
+  return moves.length ? { label: el.label, id: el.id, root: el.root, moves } : null;
 };
 
 const kindOf = (e) => `${e.tag ?? e.label.replace(/[#.].*$/, '').toUpperCase()}|${e.role ?? ''}`;

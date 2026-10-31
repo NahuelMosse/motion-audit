@@ -78,7 +78,7 @@ export const judgeElement = (el, policy = {}) => {
       break;
     }
   }
-  for (const u of el.undecided ?? []) unsure(u.check, u.detail, u.key, u.cadence);
+  for (const u of el.undecided ?? []) add('inconclusive', u.detail, `${u.check} ${u.key}`, undefined, { check: u.check, key: u.key });
   if (el.interruptUnsure && !el.interrupt?.length) unsure('interrupt-jump', 'hover left mid-way: the animation restarted but the value cannot be followed', 'hover', el.interruptUnsure);
   if (el.interrupt?.length) add('interrupt-jump', `hover left mid-way: ${el.interrupt.map((j) => `${j.label} ${j.prop}`).join(', ')} jump instead of reversing`, 'hover');
   if (el.reduced?.moves) add('reduced-motion-moves', `with prefers-reduced-motion it still moves (${el.reduced.moves})`, 'press');

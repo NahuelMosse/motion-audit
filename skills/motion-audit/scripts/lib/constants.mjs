@@ -151,3 +151,5 @@ export const DENY_TEXT = new RegExp(`(?<!\\p{L})(?:${DENY_WORDS.join('|')})(?!\\
 // Controls that must have an accessible name to be pressed: an unnamed one may be a trash can.
 export const NAMED_CONTROL = 'button, summary, [role=button]';
 export const LOGIN_PATH = /\/(log-?in|sign-?in|sign_in|auth|sso|session\/new)(\/|$|\?)/i;
+// A motion sampled fewer times than this is never examined for jumps (findJumps needs a start, a settle and room between).
+export const SIGHTING_MIN_SAMPLES = 5;
