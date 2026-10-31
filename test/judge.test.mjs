@@ -79,3 +79,35 @@ test('a sparse recording that cannot be told from an ease-in is inconclusive, wi
   const decided = finalize([...raw, { kind: 'ease-in', element: el.label, key: 'measured button.js', detail: 'x' }], validateConfig({})).findings;
   assert.ok(decided.some((f) => f.kind === 'ease-in') && !decided.some((f) => f.kind === 'inconclusive'));
 });
+
+// A CSS ease-in measured from frames: at 60 Hz it is an ease-in; sampled sparsely it is that or undecided, never nothing.
+test('a declared ease-in whose measured curve is sampled at 60 Hz is an ease-in; sparse samples give ease-in or inconclusive, never nothing', async () => {
+  const { analyzeRecording } = await import('../skills/motion-audit/scripts/lib/series.mjs');
+  const { FRAME, irregularTimes, prng, txElement } = await import('./helpers/curves.mjs');
+  const { fingerprint } = await import('../skills/motion-audit/scripts/lib/config.mjs');
+  const judged = (times) => {
+    const tx = times.map((t) => (t <= 0 ? 0 : 300 * Math.min(1, t / 600) ** 3));
+    const motion = analyzeRecording({ elems: [txElement(times, tx, { root: true, label: 'button "Save"' })], anims: [], marks: [] });
+    const el = element({ transition: transition(['transform'], 600, 'ease-in'), moments: { press: moment({ changed: ['transform'], motion, transition: transition(['transform'], 600, 'ease-in') }) } });
+    return judgeElement(el).filter((f) => f.key === 'measured button "Save"');
+  };
+  const measured = { kind: 'ease-in', element: 'button "Save"', key: 'measured button "Save"' };
+  const dense = judged([-2 * FRAME, -FRAME, ...Array.from({ length: 45 }, (_, i) => i * FRAME)]);
+  assert.deepEqual(dense.map((f) => f.kind), ['ease-in']);
+  for (const [minF, maxF] of [[3, 6], [6, 9], [9, 14]]) for (let seed = 1; seed <= 40; seed++) {
+    const rows = judged([-4 * FRAME, ...irregularTimes(prng(seed * 977), 0, 800, minF, maxF)]);
+    assert.equal(rows.length, 1, `${minF}-${maxF} frames, seed ${seed}: the sparse recording left no row for the measured ease-in`);
+    assert.equal(fingerprint(rows[0]).split(':')[1], fingerprint(measured).split(':')[1], `${minF}-${maxF} frames, seed ${seed}: ${rows[0].kind} must carry the fingerprint of the ease-in finding`);
+  }
+});
+
+test('a declared ease-in whose sparse measured curve was fitted as something else is inconclusive; dense, the fit stands', () => {
+  const move = (samples) => ({ prop: 'translateX', shape: 'ease-out', easeInTie: false, durationMs: 600, samples, cadence: { median: 100, max: 180 }, jumps: [], settled: true });
+  const judged = (m) => judgeElement(element({
+    transition: transition(['transform'], 600, 'ease-in'),
+    moments: { press: moment({ changed: ['transform'], transition: transition(['transform'], 600, 'ease-in'), motion: [{ label: 'button "Save"', root: true, moves: [m] }] }) },
+  })).filter((f) => f.key === 'measured button "Save"');
+  assert.deepEqual(judged(move(5)).map((f) => f.kind), ['inconclusive']);
+  assert.deepEqual(judged(move(5))[0].check, 'ease-in');
+  assert.deepEqual(judged(move(36)), []);
+});

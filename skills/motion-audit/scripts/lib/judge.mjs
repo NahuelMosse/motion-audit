@@ -60,7 +60,12 @@ export const judgeElement = (el, policy = {}) => {
         if (m.shape === 'linear' && /^(translate|scale|opacity)/.test(m.prop) && animatedMove(m)) add('linear', `${moment}: ${e.label} ${m.prop} moves linearly (measured)`, `measured ${e.label} ${m.prop}`);
       }
     }
+    // The stylesheet says this gesture eases in: its own measured motion, sampled too sparsely to be fitted, cannot
+    // rule that out, so it stays visible as undecided (never nothing).
+    const declaredEaseIn = animated.some((p) => easingKind(transitionOf(tr, p).easing) === 'ease-in');
     for (const e of d.motion) for (const m of e.moves) {
+      const sparse = m.samples / (m.durationMs / FRAME_MS) < SPARSE_DENSITY;
+      if (declaredEaseIn && e.root && sparse && m.shape !== 'ease-in' && !m.easeInTie && m.durationMs > EASE_IN_MIN_MS && animatedMove(m)) unsure('ease-in', `${moment}: ${e.label} ${m.prop} is declared to ease in, the measured curve cannot confirm it`, `measured ${e.label}`, m.cadence);
       if (m.easeInTie && m.durationMs > EASE_IN_MIN_MS && m.samples / (m.durationMs / FRAME_MS) < SPARSE_DENSITY) unsure('ease-in', `${moment}: ${e.label} ${m.prop} may ease in`, `measured ${e.label}`, m.cadence);
       if (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) add('ease-in', `${moment}: ${e.label} ${m.prop} measured ease-in over ${m.durationMs} ms`, `measured ${e.label}`);
       for (const j of m.jumps) add('jump', `${moment}: ${e.label} ${m.prop} jumps ${j.size} at ${j.atMs} ms`, `${moment} ${e.label} ${m.prop}`);
