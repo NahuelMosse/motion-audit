@@ -2,7 +2,8 @@
 
 ## 1.0.0
 
-First release as an installable plugin and package.
+First release as an installable plugin and as the npm package `motion-audit`. The package ships the
+`skills/motion-audit` directory (CLI, library and skill together); `bin` and `exports` point inside it.
 
 - Skill `motion-audit` and CLI `motion-audit`: per-frame measurement of hover, press and keyboard focus,
   click transitions, interruption, scroll, long frames and reduced motion in Chromium.

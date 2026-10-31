@@ -1,6 +1,6 @@
 # motion-audit
 
-A Claude Code skill and CLI that measure how a running web UI moves, in a real Chromium: which
+A CLI, a library and a Claude Code skill that measure how a running web UI moves, in a real Chromium: which
 controls give no hover, press or keyboard-focus feedback, which transitions snap or jank, long frames,
 ease-in curves and off-band durations, animations that jump or restart when interrupted, and
 `prefers-reduced-motion` that is missing or broken. It records the element and its children on every
@@ -14,29 +14,13 @@ runs. The pointer and the scroll are real, though: handlers bound to hover (`mou
 `beforeunload` beacons run. Audit a throwaway or staging environment, never one where those events
 are billed or irreversible.
 
-## Install as a Claude Code plugin
+## Install and run
+
+Node 22.12+ and Playwright 1.59+ with Chromium in the project you audit.
 
 ```bash
-claude plugin marketplace add NahuelMosse/motion-audit
-claude plugin install motion-audit@motion-audit
-```
-
-Pin a release by adding the tag to the marketplace source, and update with the plugin commands:
-
-```bash
-claude plugin marketplace add NahuelMosse/motion-audit#v1.0.0
-claude plugin marketplace update motion-audit
-claude plugin update motion-audit@motion-audit
-```
-
-The skill needs Node 22.12+ and Playwright 1.59+ with Chromium in the project you audit
-(`npm i -D playwright && npx playwright install chromium`). Set `PLAYWRIGHT_ROOT` to a project that has
-it when the audited project does not.
-
-## Standalone CLI
-
-```bash
-npm i -D github:NahuelMosse/motion-audit#v1.0.0
+npm i -D motion-audit playwright
+npx playwright install chromium
 npx motion-audit http://localhost:3000/orders
 npx motion-audit http://localhost:3000/orders --cpu 4 --click '[aria-controls=filters]' --interrupt
 npx motion-audit compare ref.json mine.json
@@ -115,6 +99,30 @@ the shell, failing on new findings only:
 ```bash
 npx motion-audit "$APP_URL/orders" --max 200 --min-coverage 0.8 --baseline motion-baseline.json
 ```
+
+## Claude Code skill
+
+The same tool as a skill: Claude measures the page, reads the findings and fixes the CSS. The skill is the
+`skills/motion-audit` directory, self-contained (CLI and library included), so the plugin, `npx skills add
+NahuelMosse/motion-audit` and a copy of that directory all work. Inside the skill, `npx --no-install
+motion-audit` is preferred when the project has the devDependency; otherwise it runs the bundled script.
+
+
+```bash
+claude plugin marketplace add NahuelMosse/motion-audit
+claude plugin install motion-audit@motion-audit
+```
+
+Pin a release by adding the tag to the marketplace source, and update with the plugin commands:
+
+```bash
+claude plugin marketplace add NahuelMosse/motion-audit#v1.0.0
+claude plugin marketplace update motion-audit
+claude plugin update motion-audit@motion-audit
+```
+
+The skill needs the same Node and Playwright. Set `PLAYWRIGHT_ROOT` to a project that has
+it when the audited project does not.
 
 ## Develop
 
