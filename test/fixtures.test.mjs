@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { audit, exitCode } from '../skills/motion-audit/scripts/lib/index.mjs';
-import { CLI_MATRIX, FRAME_RATE_BOUND } from './fixture-matrix.mjs';
+import { CLI_MATRIX } from './fixture-matrix.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
 import { GOLDEN_PATH, signature } from './helpers/golden.mjs';
 import { serve } from './helpers/serve.mjs';
@@ -34,9 +34,7 @@ const golden = JSON.parse(readFileSync(GOLDEN_PATH, 'utf8'));
 // The golden comparison of every matrix entry. The three-runs job (fixture-runs.mjs) compares each
 // of its runs to the same golden file, so a job that runs it sets MA_SKIP_GOLDEN to audit nothing twice.
 for (const [position, entry] of CLI_MATRIX.entries()) {
-  const skip = process.env.MA_SKIP_GOLDEN ? 'covered by the three-runs job'
-    : !inShard(entry.name, position) ? 'other shard'
-      : process.platform === 'darwin' && FRAME_RATE_BOUND.has(entry.name) && 'needs more frames per second than macOS runners render';
+  const skip = process.env.MA_SKIP_GOLDEN ? 'covered by the three-runs job' : !inShard(entry.name, position) && 'other shard';
   test(`fixture ${entry.name} yields exactly the expected findings and exit code`, { skip }, async () => {
     const r = await runCli([`${srv.url}/${entry.fixture}`, ...entry.args, '--json']);
     assert.ok(r.report, r.stderr);

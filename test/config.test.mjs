@@ -51,6 +51,7 @@ test('bands override the defaults per gesture and keep the others', () => {
 });
 
 test('the default severity of a kind applies, and the config can raise or (with a reason) silence it', () => {
+  assert.equal(finalize([raw(), raw()], validateConfig({})).findings.length, 1, 'one finding per fingerprint');
   assert.equal(finalize([raw()], validateConfig({})).findings[0].level, 'warning');
   assert.equal(finalize([raw()], validateConfig({ severity: { duration: 'error' } })).findings[0].level, 'error');
   assert.equal(finalize([raw()], validateConfig({ severity: { duration: { level: 'off', reason: 'tokens' } } })).findings.length, 0);

@@ -100,6 +100,17 @@ test('a node that had finished moving and is replaced by a new one that starts o
   assert.deepEqual(found, []);
 });
 
+test('the join follows a slow sampling interval: a re-mounted node is found when frames come every 50 ms', () => {
+  const step = 50;
+  const t1 = Array.from({ length: 8 }, (_, i) => i * step);
+  const t2 = Array.from({ length: 18 }, (_, i) => t1.at(-1) + step + i * step);
+  const a = bar(1, t1, t1.map((t) => grow(t, 800)));
+  const b = bar(2, t2, t2.map((t) => grow(t - t2[0], 800)));
+  const moves = analyzeRecording({ elems: [a, b], marks: [], anims: [] });
+  assert.equal(moves.length, 1);
+  assert.ok(moves[0].moves.find((m) => m.prop === 'width').jumps.length >= 1);
+});
+
 test('nodes of another tag or another parent are not joined', () => {
   const t1 = Array.from({ length: 22 }, (_, i) => i * FRAME);
   const t2 = Array.from({ length: 40 }, (_, i) => t1.at(-1) + FRAME + i * FRAME);

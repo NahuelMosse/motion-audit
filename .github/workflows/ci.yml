@@ -53,6 +53,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install chromium
         if: runner.os != 'Linux'
+      - name: Frame cadence of this runner
+        run: node test/helpers/frame-cadence.mjs
+        continue-on-error: true
       - name: Browser tests
         run: npm run test:browser
         env:

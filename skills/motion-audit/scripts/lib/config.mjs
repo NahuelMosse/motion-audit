@@ -78,12 +78,17 @@ const ignoreMatches = (rule, f) => (rule.id ? rule.id === f.id : rule.kind === f
 export const finalize = (raw, config, { devServer = false } = {}) => {
   const findings = [];
   const suppressed = [];
+  const seen = new Set();
   for (const f of raw) {
+    // One finding per fingerprint: several series can describe the same thing (two nodes of one component).
+    const id = fingerprint(f);
+    if (seen.has(id)) continue;
+    seen.add(id);
     let level = f.level ?? KINDS[f.kind].level;
     if (f.kind === 'long-frame' && devServer) level = 'warning';
     level = config.severity[f.kind] ?? level;
     if (level === 'off') continue;
-    const full = { id: fingerprint(f), level, kind: f.kind, element: f.element, detail: f.detail };
+    const full = { id, level, kind: f.kind, element: f.element, detail: f.detail };
     const rule = config.ignore.find((r) => ignoreMatches(r, full));
     if (rule) suppressed.push({ ...full, reason: rule.reason });
     else findings.push(full);

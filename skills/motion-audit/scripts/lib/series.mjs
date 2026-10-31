@@ -147,12 +147,14 @@ const kindOf = (e) => `${e.tag ?? e.label.replace(/[#.].*$/, '').toUpperCase()}|
 export const joinRemounts = (elems) => {
   if (elems.length < 2) return elems;
   const end = Math.max(...elems.map((e) => e.t.at(-1)));
+  // The gap that counts as "the next frame" follows the machine's own sampling interval.
+  const interval = Math.max(FRAME_MS, median(elems.flatMap((e) => e.t.slice(1).map((x, i) => x - e.t[i]))));
   const taken = new Set();
   const next = new Map();
   for (const a of [...elems].sort((x, y) => x.t.at(-1) - y.t.at(-1))) {
-    if (a.root || a.t.at(-1) >= end - 2 * FRAME_MS) continue;
+    if (a.root || a.t.at(-1) >= end - 2 * interval) continue;
     const gap = (b) => b.t[0] - a.t.at(-1);
-    const b = elems.filter((x) => x !== a && !x.root && !taken.has(x) && x.parent === a.parent && kindOf(x) === kindOf(a) && gap(x) > 0 && gap(x) <= REMOUNT_GAP_MS).sort((x, y) => x.t[0] - y.t[0])[0];
+    const b = elems.filter((x) => x !== a && !x.root && !taken.has(x) && x.parent === a.parent && kindOf(x) === kindOf(a) && gap(x) > 0 && gap(x) <= Math.max(REMOUNT_GAP_MS, 3 * interval)).sort((x, y) => x.t[0] - y.t[0])[0];
     if (b) { next.set(a, b); taken.add(b); }
   }
   return elems.filter((e) => !taken.has(e)).map((head) => {
