@@ -58,6 +58,8 @@ const DANGEROUS = {
   'link to logout': '<a href="/api/logout" aria-expanded="false">Account</a>',
   'link to delete': '<a href="/orders/12/delete">Order</a>',
   'link to a page': '<a href="/settings" aria-expanded="false">Settings</a>',
+  'hash-router link': '<a href="#/orders/12/delete" aria-expanded="false">Order</a>',
+  'fragment of a missing element': '<a href="#nowhere" aria-expanded="false">Section</a>',
   'link with an empty href': '<a href="" aria-expanded="false">Reload</a>',
   'control inside a link': '<a href="/inbox"><span role="button" tabindex="0">Wrapped</span></a>',
   'place order': '<button type="button">Place order</button>',
@@ -78,7 +80,8 @@ const SAFE = {
   'type=button inside a form': '<form><button type="button" aria-expanded="false">Filtros</button></form>',
   'aria-labelledby with a harmless name': '<span id="n">Favorites</span><button type="button" aria-pressed="false" aria-labelledby="n">x</button>',
   'img alt': '<button type="button"><img alt="Settings" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></button>',
-  'same-document fragment link': '<a href="#x" aria-expanded="false">Section</a>',
+  'same-document fragment link': '<span id="x"></span><a href="#x" aria-expanded="false">Section</a>',
+  'bare # link': '<a href="#" aria-expanded="false">Top</a>',
   'summary Details': '<details><summary>Details</summary>x</details>',
 };
 
@@ -154,6 +157,26 @@ test('a pointer-event sortable is neither reordered nor persisted: the press is 
     assert.ok(report.elements.every((e) => e.pressMode === 'real'));
     assert.equal(await order(), 'abc');
     assert.equal(await page.evaluate(() => localStorage.getItem('order')), null);
+    assert.deepEqual(calls(), []);
+  });
+});
+
+test('--interact does not activate buttons that act on pointerup or on the click they dispatch themselves (React Aria usePress)', async () => {
+  await withPage(async (page) => {
+    await page.goto(`${srv.url}/react-aria-press.html`);
+    // The fixture does activate on a plain press: the paths it models are real.
+    for (const id of ['early', 'late']) {
+      const box = await (await page.$(`#${id}`)).boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+    }
+    assert.deepEqual(calls().sort(), ['POST /api/press-early', 'POST /api/press-late'], 'the fixture activates on a plain press');
+    srv.stats.requests.length = 0;
+    const report = await audit(page, { url: `${srv.url}/react-aria-press.html`, interact: true });
+    assert.equal(report.coverage.audited, 2);
+    assert.ok(report.elements.every((e) => e.pressMode === 'real'));
     assert.deepEqual(calls(), []);
   });
 });

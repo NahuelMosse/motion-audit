@@ -48,6 +48,8 @@ export const SETTLE_MAX_MS = 2000;
 export const INTERRUPT_MIN_MOTION_MS = 80;
 export const INTERRUPT_LEAD_MS = 80;
 export const CLICK_LEAD_MS = 120;
+// After a real press is released, clicks stay cancelled this long: a library may dispatch its own click up to ~80 ms later.
+export const PRESS_GUARD_MS = 150;
 export const CLICK_RECORD_MS = 1500;
 // A click recording whose only jump candidate fell in a frame too long to judge is recorded again, at most this many times.
 export const CLICK_RESOLVE_RETRIES = 2;

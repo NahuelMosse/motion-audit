@@ -41,3 +41,11 @@ test('a Playwright older than 1.59 is refused with the reason', () => {
   const root = fakeProject('module.exports = { chromium: {} };', '1.58.0');
   assert.throws(() => loadPlaywright({ PLAYWRIGHT_ROOT: root }, process.cwd()), /too old.*1.59/);
 });
+
+test('audit(page) refuses a page whose Playwright cannot remove the tracer it installs (before 1.59)', async () => {
+  const { audit } = await import('../skills/motion-audit/scripts/lib/index.mjs');
+  const calls = [];
+  const old = { goto: async () => {}, url: () => 'http://127.0.0.1:1/', context: () => ({}), addInitScript: async () => { calls.push('addInitScript'); } };
+  await assert.rejects(() => audit(old, {}), /needs Playwright 1\.59 or later/);
+  assert.deepEqual(calls, ['addInitScript']);
+});

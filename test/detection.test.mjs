@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { audit, exitCode, fingerprint } from '../skills/motion-audit/scripts/lib/index.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
+import { denseInconclusive } from './helpers/golden.mjs';
 import { serve } from './helpers/serve.mjs';
 
 let srv;
@@ -43,6 +44,7 @@ test('a hover that re-lays-out a large table is a long-frame error even though n
 test('a toast that teleports in, holds and leaves is a jump error', async () => {
   const report = await audit(`${srv.url}/toast-teleport.html`, { click: '#show' });
   const jump = report.findings.find((f) => f.kind === 'jump' && f.element === 'click #show');
+  assert.deepEqual(denseInconclusive(report), [], 'inconclusive although the recorded frames were dense (60 Hz)');
   if (jump) {
     assert.equal(jump.level, 'error');
     assert.match(jump.detail, /translateX jumps/);

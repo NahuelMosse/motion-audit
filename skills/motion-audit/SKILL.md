@@ -98,10 +98,10 @@ real pointer and scroll the real page, so handlers bound to hover (`mouseenter`,
 hover event is billed or irreversible. `--interact` is opt-in and adds a real press and the
 toggle probes (`not-interruptible`, `reduced-motion-residue`); a denylist skips submit and reset
 controls (inside their form or tied to it with `form=`), buttons with no accessible name, every link
-whose `href` is not a `#fragment` (and any control inside one), destructive or payment wording in
+whose `href` is not `#` or the `#id` of an element of the page (hash routes included; and any control inside one), destructive or payment wording in
 English, Spanish, Portuguese, French, German and Italian (including `aria-labelledby` and image alt
 text), `[draggable]`, sliders and separators; a press is released where it was made (the pointer never
-moves while it is down, so nothing is dragged) with the click cancelled; the
+moves while it is down, so nothing is dragged), cancelled with a `pointercancel` before the release and with clicks cancelled for a moment after it (longer than the 80 ms a library waits for the native click), so libraries that act on pointerup (React Aria) do not fire; a plain `mouseup` handler on the control still runs; the
 page is reloaded between probes, the run stops if a gesture navigates, every toggle is clicked as the
 same node an even number of times, and the denylist is checked again before each click and before the
 reduced-motion pass presses a control. Use it only

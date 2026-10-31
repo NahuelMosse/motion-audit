@@ -124,10 +124,16 @@ export const waitSettled = (n, { minMs, quietMs, capMs }) => new Promise((resolv
 // Why --interact must not press or toggle this element, or null.
 export const denyReason = (n, { selector, text, flags, named }) => {
   if (n.matches(selector)) return 'submit, reset, drag or slider control';
-  // A link that is not a same-document fragment navigates (and a GET may mark things read or log out) before
-  // anything can notice; so does a control inside such a link.
+  // A link that does not point at an element of this page (`#` or `#id` of an element that exists) navigates, or is
+  // a hash route (`#/orders/12/delete`) a router follows, before anything can notice; so does a control inside one.
   const link = n.closest('a[href], area[href]');
-  if (link && !(link.getAttribute('href') ?? '').startsWith('#')) return `link that leaves the page (${(link.getAttribute('href') ?? '').slice(0, 40)})`;
+  if (link) {
+    const target = link.getAttribute('href') ?? '';
+    let id = null;
+    try { id = decodeURIComponent(target.slice(1)); } catch { id = null; }
+    const inPage = target === '#' || (target.startsWith('#') && id && document.getElementById(id));
+    if (!inPage) return `link that leaves the page or routes (${target.slice(0, 40)})`;
+  }
   // A submit button of a form, wherever it sits (inside it or tied to it with form=): a default <button> submits.
   if (n.form && ['submit', 'image', 'reset'].includes(n.type)) return 'submits or resets a form';
   const byIds = (n.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.textContent ?? '');

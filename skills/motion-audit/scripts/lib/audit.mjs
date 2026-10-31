@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, NOISY_UNATTRIBUTED_MS, ENV_NOISE_MIN_ELEMENTS, RECOUNT_AFTER_MS, SCHEMA_VERSION,
+  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MIN_PLAYWRIGHT, MAX_TOGGLES, NOISY_UNATTRIBUTED_MS, ENV_NOISE_MIN_ELEMENTS, RECOUNT_AFTER_MS, SCHEMA_VERSION,
   SCROLL_STEP_MS, SCROLL_STEP_PX, SCROLL_TAIL_MS, TOGGLE, VIEWPORT,
 } from './constants.mjs';
 import { UsageError } from './args.mjs';
@@ -77,6 +77,8 @@ export const audit = async (pageOrUrl, o = {}) => {
     url = o.url ?? page.url();
     if (!url || url === 'about:blank') throw new AuditError('the page has not been navigated: pass options.url or call page.goto() first');
     initScript = await page.addInitScript(tracer, TRACER_CONFIG);
+    // Before Playwright 1.59 addInitScript returns nothing: the tracer could not be removed from the caller's page.
+    if (typeof initScript?.dispose !== 'function') throw new AuditError(`audit(page) needs Playwright ${MIN_PLAYWRIGHT.join('.')} or later: the page's Playwright cannot remove the tracer it installs (addInitScript returned no Disposable). Upgrade it, or pass a URL`);
   } else {
     url = pageOrUrl;
     const { chromium } = loadPlaywright();

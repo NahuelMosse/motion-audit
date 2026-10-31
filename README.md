@@ -50,7 +50,7 @@ Exit `0` clean, `1` findings, `2` could not run or audited nothing. Audit a prod
 | `--only <sel>` | audit only matching controls (repeatable) |
 | `--max <n>` | audit at most n controls, default 40; the summary says `audited N of M` |
 | `--min-coverage <0-1>` | exit 2 when audited / candidates is lower; controls beyond `--max` count as not audited, so raise `--max` too |
-| `--interact` | real press and toggle probes; a denylist skips submit and reset controls, unnamed buttons, every link that is not a `#fragment`, destructive wording in six languages, drag and slider controls |
+| `--interact` | real press and toggle probes; a denylist skips submit and reset controls, unnamed buttons, every link that is not `#` or an `#id` on the page, destructive wording in six languages, drag and slider controls |
 | `--click <sel>` `--interrupt` | record a real click (and a second one half-way); clicks the target twice, four times with `--interrupt`, and at most eight times (sixteen) when sparse frames or a flaky finding force a re-measure: throwaway environments only |
 | `--allow-redirect` | audit the page the URL redirects to; without it any redirect, from the server or from script, exits 2, and a login page always does |
 | `--cpu <rate>` | CPU throttle, 4 is a mid-range phone |

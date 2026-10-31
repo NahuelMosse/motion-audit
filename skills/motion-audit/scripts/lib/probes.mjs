@@ -1,7 +1,7 @@
 // The gestures: what one control, one toggle, one click target and the reduced-motion pass do.
 import { join } from 'node:path';
 import {
-  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
+  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, PRESS_GUARD_MS, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
   HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, CLICK_UNSURE_MAX_DT_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
   REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
@@ -37,12 +37,17 @@ const needsRetry = (motion) => sparsity(motion) < SPARSE_DENSITY || undecided(mo
 const better = (next, cur) => (undecided(next.motion) !== undecided(cur.motion) ? undecided(next.motion) < undecided(cur.motion) : sparsity(next.motion) > sparsity(cur.motion));
 
 // A real press is released where it was pressed, never after a movement: a pointer that moves while
-// down starts a drag (native or a pointer-event sortable) and drops it somewhere. The release still makes
-// the browser dispatch a click on the control; it is cancelled in the capture phase of the window, before
-// any page handler sees it (as are the other events a stray release can produce). Only then does the
-// pointer move away.
-const releasePress = async (page) => {
+// down starts a drag (native or a pointer-event sortable) and drops it somewhere. Before the release the
+// press is cancelled with a pointercancel on the control, as the browser does when it takes a gesture over:
+// libraries that activate on pointerup (React Aria's usePress) abort instead of firing the action. The release
+// still makes the browser dispatch a click on the control; it is cancelled in the capture phase of the window,
+// before any page handler sees it, and the guard stays on for PRESS_GUARD_MS so that a click a library
+// dispatches itself a moment after the pointerup (usePress waits 80 ms for the native one) is eaten too.
+// Only then does the pointer move away. What remains: a plain mouseup or pointerup handler on the control still runs.
+const releasePress = async (page, target) => {
+  await target.evaluate((n) => n.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1, pointerType: 'mouse', isPrimary: true, bubbles: true })));
   await page.mouse.up();
+  await wait(page, PRESS_GUARD_MS);
   await guardPress(page, false);
   await page.mouse.move(1, 1);
 };
@@ -118,7 +123,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         press = await traced(page, proxy, async () => { await page.mouse.down(); await settle(proxy); });
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
-        await releasePress(page);
+        await releasePress(page, proxy);
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
       } else {
         let ids;
@@ -371,7 +376,7 @@ export const reducedPass = async (ctx, targets) => {
       if (real) { await guardPress(page, true); await page.mouse.down(); } else ids = await pseudo.force(h, ['hover', 'active']);
       await settle(h);
       const pressed = await snapshot(h, T);
-      if (real) await releasePress(page); else { await pseudo.clear(ids); await page.mouse.move(1, 1); }
+      if (real) await releasePress(page, h); else { await pseudo.clear(ids); await page.mouse.move(1, 1); }
       await settle(h);
       const released = await snapshot(h, T);
       per.set(path, { moves: reducedMoves(rest, pressed), residue: reducedResidue(rest, released) });
