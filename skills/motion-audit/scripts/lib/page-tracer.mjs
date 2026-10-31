@@ -104,12 +104,13 @@ export const tracer = (cfg) => {
         const id = idOf(n);
         let e = rec.elems.get(id);
         if (!e) {
-          e = { id, parent: n.parentElement ? idOf(n.parentElement) : 0, label: labelOf(n), tag: n.tagName, role: n.getAttribute('role'), root: n === rec.root, t: [] };
+          e = { id, parent: n.parentElement ? idOf(n.parentElement) : 0, label: labelOf(n), tag: n.tagName, role: n.getAttribute('role'), root: n === rec.root, t: [], r: [] };
           for (const c of COLS) e[c] = [];
           rec.elems.set(id, e);
         }
         const p = pose(n);
         e.t.push(ts);
+        e.r.push(performance.now());
         COLS.forEach((c, i) => e[c].push(p[i]));
       }
     }

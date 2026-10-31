@@ -265,10 +265,12 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
   const measure = async () => {
     const quiet = await attempt(false);
     if (quiet.missing) return quiet;
-    // What was already moving before the click (loops, carousels) is ambient, not the click's motion.
+    // What was already moving before the click (loops, carousels) is ambient, not the click's motion: a motion
+    // that starts after the click, or that has come to rest. A loop sampled with a long first interval looks
+    // like it starts after the click, but it never rests.
     const analyze = (t) => {
       const clickT = t.rec.marks[0] ?? Infinity;
-      return analyzeRecording(t.rec, { longFrames: longWindows(t.loaf, t.from, unattributedLimit(page)) }).map((e) => ({ ...e, moves: e.moves.filter((m) => m.firstT >= clickT - 2 * FRAME_MS) })).filter((e) => e.moves.length);
+      return analyzeRecording(t.rec, { longFrames: longWindows(t.loaf, t.from, unattributedLimit(page)) }).map((e) => ({ ...e, moves: e.moves.filter((m) => m.firstT >= clickT - 2 * FRAME_MS && (m.settled || m.startT >= clickT - 2 * FRAME_MS)) })).filter((e) => e.moves.length);
     };
     let traced2 = await attempt(true);
     if (traced2.missing) return traced2;

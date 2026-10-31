@@ -35,8 +35,11 @@ export const interruptionJumps = (rec, markT, { durationMs, small = false, longF
       const min = small ? SMALL_STEP_EPS_FACTOR * EPS[PROP_OF[c]] : JUMP_MIN_STEP[c];
       if (min === undefined) continue;
       const { t } = el;
+      // When each sample was read (`t` is the start of its frame, which a slow frame leaves far behind): marks and
+      // animation events share this clock.
+      const r = el.r ?? t;
       const v = c === 'rot' ? unwrap(el[c]) : el[c];
-      const i = t.findIndex((x) => x >= markT);
+      const i = r.findIndex((x) => x >= markT);
       if (i < 3 || i >= v.length - 1) continue;
       const range = Math.max(...v) - Math.min(...v);
       if (range < EPS[PROP_OF[c]]) continue;
@@ -49,7 +52,7 @@ export const interruptionJumps = (rec, markT, { durationMs, small = false, longF
         const dt = t[k] - t[k - 1];
         // An Animation object that restarted is strong evidence, so a smaller step suffices than
         // for a position-only teleport judged in small mode.
-        const restarted = own.some((a) => isRestart(a) && a.t >= markT - RESTART_EVENT_SLACK_MS && a.t <= t[k] + Math.max(RESTART_EVENT_SLACK_MS, 2 * dt));
+        const restarted = own.some((a) => isRestart(a) && a.t >= markT - RESTART_EVENT_SLACK_MS && a.t <= r[k] + Math.max(RESTART_EVENT_SLACK_MS, 2 * dt));
         if (d < Math.max(min, (small && !restarted ? SMALL_MIN_SHARE : RESTART_MIN_SHARE) * range)) continue;
         if (!restarted && longFrames.some(([s, len]) => s <= t[k] + LONG_FRAME_STEP_SLACK_MS && s + len >= t[k - 1] - LONG_FRAME_STEP_SLACK_MS)) continue;
         const teleports = !transitionOnly && fine && dt > 0 && dt <= JUMP_MAX_DT_MS && d / dt > (JUMP_PEAK_SLOPE * range) / dur;

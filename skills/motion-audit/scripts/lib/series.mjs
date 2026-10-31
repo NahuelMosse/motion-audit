@@ -125,7 +125,7 @@ export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
   const tol = amp * 0.005;
   const start = v.findIndex((x) => Math.abs(x - first) > tol);
   if (start < 1) return null;
-  const tail = v.slice(-4);
+  const tail = v.slice(-3);
   const settled = tail.every((x, i) => i === 0 || Math.abs(x - tail[i - 1]) <= tol);
   let settle = n - 1;
   if (settled) while (settle > start && Math.abs(v[settle - 1] - final) <= tol) settle--;
