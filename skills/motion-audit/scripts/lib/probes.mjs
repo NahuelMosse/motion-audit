@@ -2,10 +2,10 @@
 import { join } from 'node:path';
 import {
   CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CONTACT_SHEET_STEP_MS, DENY_SELECTOR, DENY_TEXT, FOCUS_DWELL_MS, FRAME_MS,
-  HIT_TEST_POINTS, HOVER_DWELL_MS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_TAIL_MS, LONG_FRAME_MS, LONG_FRAME_UNATTRIBUTED_MS, PRESS_DWELL_MS,
+  HIT_TEST_POINTS, HOVER_DWELL_MS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_TAIL_MS, PRESS_DWELL_MS, SETTLE_MAX_MS,
   REDUCED_LOOP_SPINNER_PX, REST_MARGIN_MS, REST_MAX_MS, REST_MIN_MS, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SETTLE_MARGIN_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
 } from './constants.mjs';
-import { createPseudoStates, diff, load, longFramesBetween, shot, snapshot, toMs, traced } from './browser.mjs';
+import { createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced } from './browser.mjs';
 import { interruptionJumps } from './continuity.mjs';
 import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
@@ -14,6 +14,21 @@ import { analyzeRecording } from './series.mjs';
 const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source };
 const asElement = (jsHandle) => jsHandle.asElement();
 const wait = (page, ms) => page.waitForTimeout(ms);
+
+// Dwells at least `min` ms, then until the CSS and WAAPI animations of `root` and its subtree have
+// finished (at most SETTLE_MAX_MS): a slow transition is measured to its end, a fast one is not
+// waited for beyond the minimum.
+const settle = async (page, root, min) => {
+  await wait(page, min);
+  await root.evaluate(async (n, cap) => {
+    const end = performance.now() + cap;
+    while (performance.now() < end) {
+      const running = n.getAnimations({ subtree: true }).filter((a) => a.playState === 'running' && Number.isFinite(a.effect?.getComputedTiming().endTime));
+      if (!running.length) return;
+      await Promise.race([Promise.all(running.map((a) => a.finished.catch(() => {}))), new Promise((r) => setTimeout(r, 100))]);
+    }
+  }, SETTLE_MAX_MS);
+};
 
 export const denied = (handle) => handle.evaluate(denyReason, DENY);
 
@@ -48,7 +63,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   const rest = transition(await proxy.evaluate(readTransition));
   const el = { label, kind: info.kind, selected: info.selected, transition: rest, moments: {}, long: [], pressMode: real ? 'real' : 'forced', hoverOnly };
   const moment = async (name, before, beforePx, after, afterPx, run) => {
-    el.moments[name] = { changed: diff(before, after), pixels: afterPx !== beforePx, motion: run.motion, transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
+    el.moments[name] = { changed: diff(before, after), pixels: await ctx.pixels.differ(beforePx, afterPx), motion: run.motion, transition: transition(await (name === 'focus' ? ring : proxy).evaluate(readTransition)) };
     el.long.push(...run.long.map((l) => ({ moment: name, ...l })));
   };
   // The element that shows the focus ring: a visually hidden input shows it on its sibling.
@@ -57,7 +72,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   if (info.kind !== 'focus-only') {
     const base = await snapshot(proxy, VISIBLE_PROPS);
     const basePx = await shot(page, box);
-    const hover = await traced(page, proxy, async () => { await page.mouse.move(point.x, point.y); await wait(page, HOVER_DWELL_MS); });
+    const hover = await traced(page, proxy, async () => { await page.mouse.move(point.x, point.y); await settle(page, proxy, HOVER_DWELL_MS); });
     if (hoverOnly && (await stillTransparent(proxy))) return { skipped: 'hidden' };
     const hovered = await snapshot(proxy, VISIBLE_PROPS);
     const hoverPx = await shot(page, box);
@@ -65,7 +80,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
     if (info.kind !== 'input') {
       let press;
       if (real) {
-        press = await traced(page, proxy, async () => { await page.mouse.down(); await wait(page, PRESS_DWELL_MS); });
+        press = await traced(page, proxy, async () => { await page.mouse.down(); await settle(page, proxy, PRESS_DWELL_MS); });
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
         await page.mouse.move(1, 1);
@@ -73,7 +88,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
       } else {
         let ids;
-        press = await traced(page, proxy, async () => { ids = await pseudo.force(proxy, ['hover', 'active']); await wait(page, PRESS_DWELL_MS); });
+        press = await traced(page, proxy, async () => { ids = await pseudo.force(proxy, ['hover', 'active']); await settle(page, proxy, PRESS_DWELL_MS); });
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
@@ -87,6 +102,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
     const hoverMs = Math.max(...hover.motion.flatMap((e) => e.moves.map((m) => m.durationMs)), 0);
     if (hoverMs >= INTERRUPT_MIN_MOTION_MS) {
       await proxy.evaluate((n) => window.__mt.begin('i', n));
+      const interruptFrom = await page.evaluate(() => window.__mt.now());
       await wait(page, INTERRUPT_LEAD_MS);
       await page.mouse.move(point.x, point.y);
       await wait(page, Math.max(70, hoverMs / 2));
@@ -94,7 +110,8 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
       await page.mouse.move(1, 1);
       await wait(page, INTERRUPT_TAIL_MS);
       const rec = await page.evaluate(() => window.__mt.end('i'));
-      el.interrupt = rec?.marks.length ? interruptionJumps(rec, rec.marks[0], { durationMs: hoverMs, small: true }) : [];
+      const frames = longWindows(await page.evaluate(() => window.__mt.loaf), interruptFrom);
+      el.interrupt = rec?.marks.length ? interruptionJumps(rec, rec.marks[0], { durationMs: hoverMs, small: true, longFrames: frames }) : [];
     }
   }
 
@@ -106,13 +123,13 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   const wrapperBefore = await Promise.all(wrapperHandles.map((h) => snapshot(h, VISIBLE_PROPS)));
   const beforePx = await shot(page, box);
   let ids;
-  const focus = await traced(page, ring, async () => { ids = await pseudo.force(original, ['focus', 'focus-visible'], { 1: ['focus-within'], 2: ['focus-within'] }); await wait(page, FOCUS_DWELL_MS); });
+  const focus = await traced(page, ring, async () => { ids = await pseudo.force(original, ['focus', 'focus-visible'], { 1: ['focus-within'], 2: ['focus-within'] }); await settle(page, ring, FOCUS_DWELL_MS); });
   const after = await snapshot(ring, VISIBLE_PROPS);
   const wrapperAfter = await Promise.all(wrapperHandles.map((h) => snapshot(h, VISIBLE_PROPS)));
   const afterPx = await shot(page, box);
   const wrapperChanged = wrapperBefore.flatMap((b, i) => diff(b, wrapperAfter[i]).map((p) => `wrapper:${p}`));
   const hiddenUntilHover = hoverOnly && (await stillTransparent(ring));
-  el.moments.focus = { changed: [...diff(before, after), ...wrapperChanged], pixels: afterPx !== beforePx, motion: focus.motion, transition: transition(await ring.evaluate(readTransition)), hiddenUntilHover };
+  el.moments.focus = { changed: [...diff(before, after), ...wrapperChanged], pixels: await ctx.pixels.differ(beforePx, afterPx), motion: focus.motion, transition: transition(await ring.evaluate(readTransition)), hiddenUntilHover };
   el.long.push(...focus.long.map((l) => ({ moment: 'focus', ...l })));
   await pseudo.clear(ids);
   return { el };
@@ -214,7 +231,7 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       long: longFramesBetween(quiet.loaf, quiet.from),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && m.durationMs > 2 * FRAME_MS).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
-      interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true }) : [],
+      interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from) }) : [],
       mounted: rec.mounted,
     };
   };
@@ -251,7 +268,7 @@ export const reducedPass = async (ctx, targets) => {
       const released = await snapshot(h, T);
       per.set(path, { moves: reducedMoves(rest, pressed), residue: reducedResidue(rest, released) });
     }
-    await page.evaluate(scrollPass, { step: 400, stepMs: 60, tail: 600, limit: LONG_FRAME_MS, strongMs: LONG_FRAME_UNATTRIBUTED_MS, maxScrollers: 5 });
+    await page.evaluate(scrollPass, { step: 400, stepMs: 60, tail: 600, maxScrollers: 5 });
     const hidden = await page.evaluate(invisibleContent);
     const infinite = await page.evaluate(infiniteAnimations, { spinnerPx: REDUCED_LOOP_SPINNER_PX });
     return { per, hidden, infinite };

@@ -18,6 +18,7 @@ const SPEC = {
   baseline: { type: 'string' },
   'storage-state': { type: 'string' },
   'wait-for': { type: 'string' },
+  'allow-redirect': { type: 'bool' },
   'min-coverage': { type: 'ratio' },
   strict: { type: 'bool' },
   json: { type: 'bool' },
@@ -39,7 +40,8 @@ motion-audit compare <ref.json> <mine.json>
   --baseline <report>     ignore findings already present in an earlier report.json
   --storage-state <file>  Playwright storage state (logged-in session)
   --wait-for <selector>   wait for it before auditing (hydration)
-  --min-coverage <0-1>    exit 2 when audited/candidates is lower
+  --allow-redirect        audit the page the URL redirects to (a login page is never audited)
+  --min-coverage <0-1>    exit 2 when audited/candidates is lower (candidates include controls beyond --max)
   --out <dir>             report and contact sheets (default: a temp directory)
   --strict                warnings fail too
   --json                  print the report as JSON (schemaVersion 1)

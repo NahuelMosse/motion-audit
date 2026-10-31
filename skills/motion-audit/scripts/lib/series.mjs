@@ -1,5 +1,5 @@
 // Pure trajectory analysis: one property sampled over time, curve classification, jump detection.
-import { JUMP_MAX_DT_MS, JUMP_MIN_SHARE, JUMP_PEAK_SLOPE, OVERSHOOT_SPRING_PCT } from './constants.mjs';
+import { FRAME_MS, JUMP_MAX_DT_MS, JUMP_MIN_SHARE, JUMP_PEAK_SLOPE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_MS } from './constants.mjs';
 
 export const round = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
 export const median = (a) => {
@@ -54,8 +54,37 @@ const findJumps = (t, v, start, settle, amp, t0, shape) => {
   return jumps;
 };
 
+// A round trip (a toast in and out) is judged leg by leg, each against its own amplitude and speed:
+// the average speed of the whole series says nothing about any one leg. Returns jumps with `atMs`
+// relative to `t0`, the start of the whole series.
+const legJumps = (t, v, eps, t0) => {
+  const first = v[0];
+  let peak = 0;
+  v.forEach((x, i) => { if (Math.abs(x - first) > Math.abs(v[peak] - first)) peak = i; });
+  const tol = Math.abs(v[peak] - first) * 0.005;
+  let arrive = peak;
+  while (arrive > 0 && Math.abs(v[arrive - 1] - v[peak]) <= tol) arrive--;
+  let depart = peak;
+  while (depart < v.length - 1 && Math.abs(v[depart + 1] - v[peak]) <= tol) depart++;
+  const out = [];
+  for (const [a, b] of [[0, arrive], [depart, v.length - 1]]) {
+    const leg = analyzeSeries(t.slice(a, b + 1), v.slice(a, b + 1), eps);
+    for (const j of leg?.jumps ?? []) out.push({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size });
+  }
+  return out;
+};
+
+// Steps where one node was replaced by another (`cuts`: indices of the first sample of the new node):
+// a node removed while still moving and a new one that starts elsewhere is a teleport.
+const cutJumps = (t, v, cuts, eps, range, t0) => cuts.flatMap((c) => {
+  if (c < 2 || c >= v.length) return [];
+  const step = Math.abs(v[c] - v[c - 1]);
+  const moving = Math.abs(v[c - 1] - v[c - 2]) > eps;
+  return moving && step >= Math.max(JUMP_MIN_SHARE * range, 3 * eps) ? [{ atMs: round(t[c] - t0, 0), size: round(step, 2) }] : [];
+});
+
 // One property over time (`t` ms, `v` values): duration, overshoot, curve shape and jumps.
-export const analyzeSeries = (t, v, eps) => {
+export const analyzeSeries = (t, v, eps, cuts = []) => {
   const n = v.length;
   if (n < 4) return null;
   const first = v[0];
@@ -89,21 +118,58 @@ export const analyzeSeries = (t, v, eps) => {
     }
     shape = [...best.entries()].sort((a, b) => a[1] - b[1])[0][0];
   }
-  // A round trip (a toast in and out) spans several motions: the average speed of the whole series
-  // says nothing about any one leg, so it is not judged for jumps.
-  const jumps = shape === 'round-trip' ? [] : findJumps(t, v, start, settle, amp, t0, shape);
+  let jumps;
+  if (cuts.length) {
+    // Joined nodes are separate motions: each is judged on its own, the joins by cutJumps.
+    const bounds = [0, ...cuts, n];
+    jumps = bounds.slice(1).flatMap((end, i) => {
+      const leg = analyzeSeries(t.slice(bounds[i], end), v.slice(bounds[i], end), eps);
+      return (leg?.jumps ?? []).map((j) => ({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size }));
+    }).concat(cutJumps(t, v, cuts, eps, range, t0));
+  } else jumps = shape === 'round-trip' ? legJumps(t, v, eps, t0) : findJumps(t, v, start, settle, amp, t0, shape);
   return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, durationMs: round(t[settle] - t0, 0), overshootPct, shape, settled, jumps };
 };
 
 export const analyzeElement = (el) => {
   const moves = [];
   for (const c of COLS) {
-    const r = analyzeSeries(el.t, c === 'rot' ? unwrap(el[c]) : el[c], EPS[PROP_OF[c]]);
+    const r = analyzeSeries(el.t, c === 'rot' ? unwrap(el[c]) : el[c], EPS[PROP_OF[c]], el.cuts);
     if (r) moves.push({ prop: PROP_OF[c], ...r });
   }
   return moves.length ? { label: el.label, root: el.root, moves } : null;
 };
-export const analyzeRecording = (rec) => (rec?.elems ?? []).map(analyzeElement).filter(Boolean);
+
+const kindOf = (e) => `${e.tag ?? e.label.replace(/[#.].*$/, '').toUpperCase()}|${e.role ?? ''}`;
+
+// A node removed mid-recording and a node of the same tag and role mounted in the same parent within
+// REMOUNT_GAP_MS is one component re-mounted (a changed React `key`): their samples form one series,
+// with `cuts` at the joins, so the animation that starts over shows as a jump.
+export const joinRemounts = (elems) => {
+  if (elems.length < 2) return elems;
+  const end = Math.max(...elems.map((e) => e.t.at(-1)));
+  const taken = new Set();
+  const next = new Map();
+  for (const a of [...elems].sort((x, y) => x.t.at(-1) - y.t.at(-1))) {
+    if (a.root || a.t.at(-1) >= end - 2 * FRAME_MS) continue;
+    const gap = (b) => b.t[0] - a.t.at(-1);
+    const b = elems.filter((x) => x !== a && !x.root && !taken.has(x) && x.parent === a.parent && kindOf(x) === kindOf(a) && gap(x) > 0 && gap(x) <= REMOUNT_GAP_MS).sort((x, y) => x.t[0] - y.t[0])[0];
+    if (b) { next.set(a, b); taken.add(b); }
+  }
+  return elems.filter((e) => !taken.has(e)).map((head) => {
+    if (!next.has(head)) return head;
+    const joined = { ...head, cuts: [] };
+    for (const c of COLS) joined[c] = [...head[c]];
+    joined.t = [...head.t];
+    for (let e = next.get(head); e; e = next.get(e)) {
+      joined.cuts.push(joined.t.length);
+      joined.t.push(...e.t);
+      for (const c of COLS) joined[c].push(...e[c]);
+    }
+    return joined;
+  });
+};
+
+export const analyzeRecording = (rec) => joinRemounts(rec?.elems ?? []).map(analyzeElement).filter(Boolean);
 
 // 'ease-in' when the curve starts slower than it ends; 'linear'; otherwise 'ok'.
 export const easingKind = (e) => {

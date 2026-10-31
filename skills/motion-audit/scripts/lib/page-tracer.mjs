@@ -34,10 +34,12 @@ export const tracer = (cfg) => {
 
   const loaf = [];
   const loafSupported = typeof PerformanceObserver !== 'undefined' && (PerformanceObserver.supportedEntryTypes ?? []).includes('long-animation-frame');
+  let loafObserver = null;
   if (loafSupported) {
-    new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) loaf.push([e.startTime, e.duration, (e.scripts ?? []).map((s) => ({ url: s.sourceURL, fn: s.sourceFunctionName, invoker: s.invoker, duration: Math.round(s.duration) }))]);
-    }).observe({ type: 'long-animation-frame', buffered: true });
+    loafObserver = new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) loaf.push([e.startTime, e.duration, (e.scripts ?? []).map((s) => ({ url: s.sourceURL, fn: s.sourceFunctionName, invoker: s.invoker, duration: Math.round(s.duration), forced: Math.round(s.forcedStyleAndLayoutDuration ?? 0) }))]);
+    });
+    loafObserver.observe({ type: 'long-animation-frame', buffered: true });
   }
 
   const animKind = (a) => {
@@ -98,7 +100,7 @@ export const tracer = (cfg) => {
         const id = idOf(n);
         let e = rec.elems.get(id);
         if (!e) {
-          e = { id, parent: n.parentElement ? idOf(n.parentElement) : 0, label: labelOf(n), root: n === rec.root, t: [] };
+          e = { id, parent: n.parentElement ? idOf(n.parentElement) : 0, label: labelOf(n), tag: n.tagName, role: n.getAttribute('role'), root: n === rec.root, t: [] };
           for (const c of COLS) e[c] = [];
           rec.elems.set(id, e);
         }
@@ -110,10 +112,11 @@ export const tracer = (cfg) => {
     if (active().length) requestAnimationFrame(frame); else running = false;
   };
 
-  document.addEventListener('click', (e) => { for (const r of active()) r.marks.push(e.timeStamp); }, true);
+  const onClick = (e) => { for (const r of active()) r.marks.push(e.timeStamp); };
+  document.addEventListener('click', onClick, true);
 
   // Nodes added while a recording runs join it: a dialog mounted on open is the motion under test.
-  new MutationObserver((records) => {
+  const mounts = new MutationObserver((records) => {
     const recsActive = active();
     if (!recsActive.length) return;
     for (const m of records) {
@@ -126,7 +129,8 @@ export const tracer = (cfg) => {
         }
       }
     }
-  }).observe(document, { childList: true, subtree: true });
+  });
+  mounts.observe(document, { childList: true, subtree: true });
 
   const initialNodes = (root, all, hint) => {
     if (root) return [root, ...root.querySelectorAll('*')].filter((n) => !SKIP.has(n.tagName)).slice(0, subtreeCap);
@@ -158,6 +162,15 @@ export const tracer = (cfg) => {
       if (!running) { running = true; requestAnimationFrame(frame); }
     },
     mark(name) { recs.get(name)?.marks.push(performance.now()); },
+    // Stops every observer and listener and removes the tracer from this document.
+    dispose() {
+      for (const r of recs.values()) r.active = false;
+      recs.clear();
+      mounts.disconnect();
+      loafObserver?.disconnect();
+      document.removeEventListener('click', onClick, true);
+      delete window.__mt;
+    },
     end(name) {
       const rec = recs.get(name);
       if (!rec) return null;

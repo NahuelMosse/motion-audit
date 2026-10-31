@@ -34,6 +34,7 @@ const printText = (r, code, opts) => {
   console.log(`report: ${join(r.out, 'report.json')}`);
   const failing = r.findings.filter((f) => f.level === 'error' || (opts.strict && f.level === 'warning'));
   if (r.coverage.audited === 0) console.log('NOT AUDITED: no control was audited, so there is no result (exit 2)');
+  else if (r.coverage.late > 0) console.log(`INCOMPLETE: ${r.coverage.late} controls appeared after the audit started, so they were not audited; re-run with --wait-for <selector> (exit 2)`);
   else if (code === 2) console.log(`coverage ${r.coverage.audited}/${r.coverage.candidates} is below --min-coverage ${opts.minCoverage} (exit 2)`);
   else console.log(failing.length ? `${failing.length} to fix, or suppress in the config with a reason (${r.findings.length - failing.length} others do not fail)` : `clean: ${r.findings.length} non-failing finding(s)`);
 };

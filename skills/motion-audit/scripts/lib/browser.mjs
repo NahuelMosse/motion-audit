@@ -1,6 +1,6 @@
 // Helpers that drive the page: tracing a gesture, snapshots, forced pseudo-states over CDP,
 // navigation with redirect checks.
-import { CLIP_MARGIN_PX, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, LONG_FRAME_UNATTRIBUTED_MS, NAV_TIMEOUT_MS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
+import { CLIP_MARGIN_PX, HYDRATION_WAIT_MS, LOGIN_PATH, LONG_FRAME_MS, NAV_TIMEOUT_MS, PIXEL_BLOCK_PX, PIXEL_CHANNEL_TOLERANCE, PIXEL_MIN_BLOCKS, TRACE_MIN_SIZE_PX, TRACE_MOUNT_CAP, TRACE_PAGE_CAP, TRACE_SUBTREE_CAP, WAIT_FOR_TIMEOUT_MS } from './constants.mjs';
 import { COLS, analyzeRecording } from './series.mjs';
 
 export class AuditError extends Error {}
@@ -23,8 +23,19 @@ export const traced = async (page, root, action) => {
   return { rec, motion: analyzeRecording(rec), long: longFramesBetween(loaf, from, to) };
 };
 
-// Long frames in [from, to] that an application script (a named source URL) caused, or that are very long.
-export const longFramesBetween = (loaf, from, to = Infinity) => loaf.filter(([s, d, scripts]) => s + d >= from && s <= to && d > LONG_FRAME_MS && ((scripts ?? []).some((x) => x.url) || d >= LONG_FRAME_UNATTRIBUTED_MS)).map(([, d, scripts]) => ({ duration: Math.round(d), scripts }));
+// The part of a frame's time that is the audit's own work: scripts with no source URL (the tracer's
+// frame callback, page.evaluate) minus the style and layout they forced, which the page's own
+// changes made necessary.
+const auditWork = (scripts) => scripts.filter((s) => !s.url).reduce((sum, s) => sum + Math.max(0, s.duration - (s.forced ?? 0)), 0);
+
+// Long frames (over LONG_FRAME_MS) in [from, to] that are the page's: what is left of a frame once
+// the audit's own script time is taken out. Frames with no script at all (style, layout, paint) count.
+export const longFramesBetween = (loaf, from, to = Infinity) => loaf
+  .filter(([s, d, scripts]) => s + d >= from && s <= to && d - auditWork(scripts ?? []) > LONG_FRAME_MS)
+  .map(([, d, scripts]) => ({ duration: Math.round(d), scripts: (scripts ?? []).filter((x) => x.url) }));
+
+// [[start, duration]] of every long frame that ends after `from`, whoever caused it.
+export const longWindows = (loaf, from) => loaf.filter(([s, d]) => d > LONG_FRAME_MS && s + d >= from).map(([s, d]) => [s, d]);
 
 // Which scripts a long frame is attributed to, from the LoAF `scripts[]`.
 export const describeLong = (long) => {
@@ -71,23 +82,80 @@ const sameDocument = (a, b) => {
 };
 export const sameLocation = sameDocument;
 
-// Loads `url` fresh (never reload: a probe may have navigated) and checks where it landed.
-export const load = async (page, url, { waitFor, expectLogin = false } = {}) => {
+// Loads `url` fresh (never reload: a probe may have navigated) and checks where it landed: after
+// the load, after --wait-for and after the hydration wait, because a session check or a router
+// redirects from script, after the response.
+export const load = async (page, url, { waitFor, allowRedirect = false } = {}) => {
   const response = await page.goto(url, { waitUntil: 'load', timeout: NAV_TIMEOUT_MS });
   if (response && response.status() >= 400) throw new AuditError(`${url} answered HTTP ${response.status()}`);
-  const landed = page.url();
-  if (!sameDocument(url, landed) && !expectLogin) {
+  const verify = () => {
+    const landed = page.url();
+    if (sameDocument(url, landed)) return landed;
     const requested = new URL(url);
     const final = new URL(landed);
     if (LOGIN_PATH.test(final.pathname + final.search) && !LOGIN_PATH.test(requested.pathname)) {
       throw new AuditError(`${url} redirected to ${landed}: that is a login page, not the page to audit. Pass --storage-state <file> with a logged-in session`);
     }
-  }
+    if (!allowRedirect) throw new AuditError(`${url} redirected to ${landed}: the page audited is not the one requested. Audit that URL, or pass --allow-redirect to audit where it lands`);
+    return landed;
+  };
+  verify();
   if (waitFor) {
     try { await page.waitForSelector(waitFor, { state: 'visible', timeout: WAIT_FOR_TIMEOUT_MS }); } catch (e) {
-      throw new AuditError(`--wait-for "${waitFor}" did not appear within ${WAIT_FOR_TIMEOUT_MS / 1000} s on ${landed}: ${e.message.split('\n')[0]}`);
+      throw new AuditError(`--wait-for "${waitFor}" did not appear within ${WAIT_FOR_TIMEOUT_MS / 1000} s on ${page.url()}: ${e.message.split('\n')[0]}`);
     }
   }
   await page.waitForTimeout(HYDRATION_WAIT_MS);
-  return { landed, redirected: !sameDocument(url, landed) };
+  const landed = verify();
+  return { landed, redirected: !sameDocument(url, landed), loadedAt: Date.now() };
+};
+
+// Compares two screenshots (base64 PNG) the way an eye does: the share of pixels that differ by more
+// than PIXEL_CHANNEL_TOLERANCE in some channel. Anti-aliasing and compositing noise stay below it.
+// Decoding happens in a blank page of the same context, away from the page under audit.
+export const createPixelComparer = async (context) => {
+  const page = await context.newPage();
+  const stats = (a, b, tolerance) => page.evaluate(async ([x, y, tol, block]) => {
+    const decode = async (b64) => {
+      const bin = atob(b64);
+      const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+      const ctx = new OffscreenCanvas(bmp.width, bmp.height).getContext('2d');
+      ctx.drawImage(bmp, 0, 0);
+      return ctx.getImageData(0, 0, bmp.width, bmp.height);
+    };
+    const [p, q] = await Promise.all([decode(x), decode(y)]);
+    const bw = Math.ceil(p.width / block);
+    const bh = Math.ceil(p.height / block);
+    if (p.width !== q.width || p.height !== q.height) return { changed: bw * bh, total: bw * bh, max: 255 };
+    let changed = 0;
+    let max = 0;
+    for (let by = 0; by < bh; by++) {
+      for (let bx = 0; bx < bw; bx++) {
+        const sum = [0, 0, 0, 0, 0, 0, 0, 0];
+        let n = 0;
+        for (let y = by * block; y < Math.min(p.height, (by + 1) * block); y++) {
+          for (let x = bx * block; x < Math.min(p.width, (bx + 1) * block); x++) {
+            const i = (y * p.width + x) * 4;
+            for (let c = 0; c < 4; c++) { sum[c] += p.data[i + c]; sum[c + 4] += q.data[i + c]; }
+            n++;
+          }
+        }
+        const d = Math.max(...[0, 1, 2, 3].map((c) => Math.abs(sum[c] - sum[c + 4]) / n));
+        if (d > tol) changed++;
+        if (d > max) max = d;
+      }
+    }
+    return { changed, total: bw * bh, max: Math.round(max) };
+  }, [a, b, tolerance, PIXEL_BLOCK_PX]);
+  return {
+    stats: (a, b, tolerance = PIXEL_CHANNEL_TOLERANCE) => (a === b ? Promise.resolve({ changed: 0, total: 1, max: 0 }) : stats(a, b, tolerance)),
+    // Whether the two screenshots show a visible difference.
+    async differ(a, b) {
+      if (a === b) return false;
+      const { changed } = await stats(a, b, PIXEL_CHANNEL_TOLERANCE);
+      return changed >= PIXEL_MIN_BLOCKS;
+    },
+    close: () => page.close().catch(() => {}),
+  };
 };

@@ -3,7 +3,7 @@
 // when an Animation object says the animation restarted, or when the sampling is fine enough to
 // show the value teleporting faster than any easing curve allows.
 import { COLS, EPS, PROP_OF, median, round, unwrap } from './series.mjs';
-import { FINE_SAMPLING_MS, JUMP_MAX_DT_MS, JUMP_MIN_STEP, JUMP_PEAK_SLOPE, RESTART_EVENT_SLACK_MS, RESTART_MIN_SHARE, RESTART_WINDOW, SMALL_MIN_SHARE, SMALL_STEP_EPS_FACTOR } from './constants.mjs';
+import { FINE_SAMPLING_MS, JUMP_MAX_DT_MS, JUMP_MIN_STEP, LONG_FRAME_STEP_SLACK_MS, JUMP_PEAK_SLOPE, RESTART_EVENT_SLACK_MS, RESTART_MIN_SHARE, RESTART_WINDOW, SMALL_MIN_SHARE, SMALL_STEP_EPS_FACTOR } from './constants.mjs';
 
 const ancestorsOf = (el, byId) => {
   const chain = new Set([el.id]);
@@ -20,7 +20,10 @@ const isRestart = (e) => e.type === 'cancel' || ((e.type === 'animation' || e.ty
 // (estimated from the series when absent). `small` is for micro-interactions (hover, a second click
 // on a trigger): steps are judged against the property's epsilon and 20 % of its range instead of
 // the absolute 24 px / 0.4 opacity of a toggle's panel.
-export const interruptionJumps = (rec, markT, { durationMs, small = false } = {}) => {
+// `longFrames`: [[startMs, durationMs]] of the long frames of the recording. A step in a frame that
+// overlaps one is the long frame (the page's animation clock kept running while its thread was
+// blocked), reported as `long-frame`; only an Animation object that restarted is still a jump there.
+export const interruptionJumps = (rec, markT, { durationMs, small = false, longFrames = [] } = {}) => {
   const found = [];
   const anims = rec.anims ?? [];
   const byId = new Map(rec.elems.map((e) => [e.id, e]));
@@ -48,6 +51,7 @@ export const interruptionJumps = (rec, markT, { durationMs, small = false } = {}
         // for a position-only teleport judged in small mode.
         const restarted = own.some((a) => isRestart(a) && a.t >= markT - RESTART_EVENT_SLACK_MS && a.t <= t[k] + RESTART_EVENT_SLACK_MS);
         if (d < Math.max(min, (small && !restarted ? SMALL_MIN_SHARE : RESTART_MIN_SHARE) * range)) continue;
+        if (!restarted && longFrames.some(([s, len]) => s <= t[k] + LONG_FRAME_STEP_SLACK_MS && s + len >= t[k - 1] - LONG_FRAME_STEP_SLACK_MS)) continue;
         const teleports = !transitionOnly && fine && dt > 0 && dt <= JUMP_MAX_DT_MS && d / dt > (JUMP_PEAK_SLOPE * range) / dur;
         if ((restarted || teleports) && (!worst || d > worst.delta)) worst = { delta: d, from: v[k - 1], to: v[k], atMs: t[k] - markT, evidence: restarted ? 'animation' : 'position' };
       }

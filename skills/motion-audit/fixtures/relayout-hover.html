@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A hover that re-lays-out a large table</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  /* Hovering the button changes the padding of every cell: the whole table is laid out again. */
+  #density:hover ~ table td { padding: 9px 7px; }
+  table { border-collapse: collapse; margin-top: 16px; }
+  td { padding: 3px 5px; border: 1px solid #eee; white-space: nowrap; }
+</style>
+</head>
+<body>
+<button id="density" type="button">Density</button>
+<table id="grid"></table>
+<script>
+  const rows = [];
+  for (let r = 0; r < 100; r++) rows.push('<tr>' + Array.from({ length: 40 }, (_, c) => '<td>' + (r * 40 + c) + '</td>').join('') + '</tr>');
+  document.getElementById('grid').innerHTML = rows.join('');
+</script>
+</body>
+</html>

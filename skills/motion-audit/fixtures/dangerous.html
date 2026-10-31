@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Controls whose click has an effect that cannot be undone</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; display: grid; gap: 16px; justify-items: start; }
+  button, summary, a.act { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; color: inherit; text-decoration: none; cursor: pointer; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover, summary:hover, a.act:hover { background: #e4e4e4; }
+  button:active, summary:active, a.act:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  .icon { width: 36px; height: 36px; padding: 0; }
+  .icon svg { width: 18px; height: 18px; display: block; margin: auto; }
+  .panel { border: 1px solid #ddd; padding: 8px; }
+  .panel[hidden] { display: none; }
+</style>
+</head>
+<body>
+<!-- Safe: an ordinary disclosure that --interact may probe. -->
+<button id="info" type="button" aria-expanded="false" aria-controls="info-panel">More information</button>
+<div id="info-panel" class="panel" hidden>Details.</div>
+
+<!-- Dangerous: every one of these reports its click to the server. -->
+<button id="del-es" type="button" aria-pressed="false" aria-label="Eliminar elemento">Quitar</button>
+<button id="trash" type="button" aria-pressed="false" data-testid="trash"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M6 4V2h4v2M5 4l1 10h4l1-10" fill="none" stroke="currentColor"/></svg></button>
+<span id="ws-name" hidden>Delete workspace</span>
+<button id="labelled" type="button" aria-pressed="false" aria-labelledby="ws-name">x</button>
+<details id="account"><summary id="del-summary" aria-expanded="false">Borrar cuenta</summary>Permanent.</details>
+<button id="pay" type="button" aria-expanded="false">Pagar ahora</button>
+<button id="send" type="button" aria-expanded="false">Envoyer</button>
+<form id="f" action="/api/form-submit" method="post"><input name="amount" value="1"></form>
+<button id="submit-outside" aria-pressed="false" form="f">Continue</button>
+<a id="logout" class="act" href="/api/logout" aria-expanded="false">Account</a>
+
+<script>
+  const ping = (name) => navigator.sendBeacon('/api/' + name, name);
+  for (const id of ['del-es', 'trash', 'labelled', 'del-summary', 'pay', 'send', 'submit-outside', 'logout']) {
+    document.getElementById(id).addEventListener('click', () => ping(id));
+  }
+  document.getElementById('f').addEventListener('submit', () => ping('form-posted'));
+  const info = document.getElementById('info');
+  info.addEventListener('click', () => {
+    const open = info.getAttribute('aria-expanded') !== 'true';
+    info.setAttribute('aria-expanded', String(open));
+    document.getElementById('info-panel').hidden = !open;
+    ping('info');
+  });
+</script>
+</body>
+</html>

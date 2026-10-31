@@ -1,8 +1,6 @@
 // Named thresholds and timings shared by the analysis and the browser driver.
 export const FRAME_MS = 1000 / 60;
 export const LONG_FRAME_MS = 50;
-// A long frame with no application script behind it is usually the tracer or a busy machine; it only counts when this long.
-export const LONG_FRAME_UNATTRIBUTED_MS = 150;
 export const MIN_PLAYWRIGHT = [1, 43];
 export const SCHEMA_VERSION = 1;
 
@@ -12,11 +10,16 @@ export const NAV_TIMEOUT_MS = 45000;
 export const WAIT_FOR_TIMEOUT_MS = 15000;
 export const HYDRATION_WAIT_MS = 800;
 export const PROBE_RELOAD_WAIT_MS = 600;
+// Controls that show up later than this after a load are not "late": the audit waits this long
+// before it counts the controls again, and a larger count means the first count was incomplete.
+export const RECOUNT_AFTER_MS = 5000;
 
-// Dwell times of each gesture.
+// Minimum dwell of each gesture; the dwell lasts until the CSS and WAAPI animations of the element
+// have finished, at most SETTLE_MAX_MS.
 export const HOVER_DWELL_MS = 450;
 export const PRESS_DWELL_MS = 250;
 export const FOCUS_DWELL_MS = 300;
+export const SETTLE_MAX_MS = 2000;
 export const REST_MIN_MS = 400;
 export const REST_MAX_MS = 1200;
 export const REST_MARGIN_MS = 150;
@@ -60,6 +63,10 @@ export const RESTART_WINDOW = 3;
 export const SMALL_MIN_SHARE = 0.2;
 export const SMALL_STEP_EPS_FACTOR = 2;
 export const RESTART_EVENT_SLACK_MS = 3 * FRAME_MS;
+// A node removed and a same-kind node mounted in the same parent within this time are one re-mounted component.
+export const REMOUNT_GAP_MS = 4 * FRAME_MS;
+// A step next to a long frame is that frame, not a jump (the animation clock ran ahead while the thread was blocked).
+export const LONG_FRAME_STEP_SLACK_MS = 2 * FRAME_MS;
 export const JUMP_MIN_STEP = { left: 24, top: 24, width: 24, height: 24, tx: 24, ty: 24, opacity: 0.4, sx: 0.3, sy: 0.3 };
 
 // Confirmation of flaky findings: re-measured, kept when most runs agree.
@@ -73,6 +80,11 @@ export const REDUCED_LOOP_SPINNER_PX = 64;
 
 export const HIT_TEST_POINTS = [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]];
 export const CLIP_MARGIN_PX = 6;
+// Screenshots differ visibly when enough PIXEL_BLOCK_PX squares change, in their average colour, by more than
+// the tolerance. Averaging squares ignores anti-aliasing (a different text rasterisation keeps the mean colour).
+export const PIXEL_BLOCK_PX = 8;
+export const PIXEL_CHANNEL_TOLERANCE = 24;
+export const PIXEL_MIN_BLOCKS = 2;
 export const CONTACT_SHEET_STEP_MS = 40;
 
 export const VISIBLE_PROPS = ['transform', 'translate', 'scale', 'rotate', 'opacity', 'background-color', 'background-image', 'color', 'box-shadow', 'border-color', 'outline-style', 'outline-width', 'outline-color', 'text-decoration-color', 'filter', 'width', 'height', 'padding-top', 'padding-left', 'margin-top', 'margin-left', 'top', 'left', 'letter-spacing', 'font-weight'];

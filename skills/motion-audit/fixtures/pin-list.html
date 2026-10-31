@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A Pin toggle that reorders the list</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-width: 320px; }
+  li { display: flex; justify-content: space-between; align-items: center; border: 1px solid #ddd; padding: 6px 10px; border-radius: 8px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 4px 12px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  button[aria-pressed=true] { background: #dde6ff; }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<ul id="list">
+  <li id="item-a"><span>Alpha</span><button type="button" aria-pressed="false" data-id="a">Pin</button></li>
+  <li id="item-b"><span>Beta</span><button type="button" aria-pressed="false" data-id="b">Pin</button></li>
+  <li id="item-c"><span>Gamma</span><button type="button" aria-pressed="false" data-id="c">Pin</button></li>
+</ul>
+<script>
+  const list = document.getElementById('list');
+  const state = JSON.parse(localStorage.getItem('pins') || '[]');
+  const render = () => {
+    for (const li of [...list.children]) li.querySelector('button').setAttribute('aria-pressed', String(state.includes(li.querySelector('button').dataset.id)));
+    // Pinned items first, in the order they were pinned.
+    for (const id of [...state].reverse()) list.prepend(document.getElementById('item-' + id));
+  };
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const id = b.dataset.id;
+    if (state.includes(id)) state.splice(state.indexOf(id), 1); else state.push(id);
+    localStorage.setItem('pins', JSON.stringify(state));
+    navigator.sendBeacon('/api/pin/' + id, id);
+    render();
+  });
+  render();
+</script>
+</body>
+</html>

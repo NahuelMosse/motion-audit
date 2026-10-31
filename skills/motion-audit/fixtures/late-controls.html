@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Most controls appear long after load</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+  button, a { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; color: inherit; text-decoration: none; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover, a:hover { background: #e4e4e4; }
+  button:active, a:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<a href="#home">Home</a>
+<script>
+  // A data fetch that resolves long after the first paint renders the real toolbar.
+  setTimeout(() => {
+    for (let i = 1; i <= 12; i++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Action ' + i;
+      document.body.append(b);
+    }
+  }, 3500);
+</script>
+</body>
+</html>

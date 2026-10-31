@@ -133,7 +133,7 @@ export const hasReducedMotionRule = () => {
 // Sections below the fold (relative to their own scroller): did anything animate in when first
 // scrolled to? Scrolls the window and every inner scroll container end to end, and returns the long
 // animation frames of the scrolling with their scripts.
-export const scrollPass = async ({ step, stepMs, tail, limit, strongMs, maxScrollers }) => {
+export const scrollPass = async ({ step, stepMs, tail, maxScrollers }) => {
   const isScroller = (e) => {
     const c = getComputedStyle(e);
     return /(auto|scroll)/.test(c.overflowY) && e.scrollHeight > e.clientHeight + 4 && e.clientHeight > 40;
@@ -174,8 +174,8 @@ export const scrollPass = async ({ step, stepMs, tail, limit, strongMs, maxScrol
   const keyframeLayout = [...new Set(document.getAnimations().flatMap((a) => (a.effect?.getKeyframes?.() ?? []).flatMap((k) => Object.keys(k)))
     .filter((p) => /^(width|height|top|left|right|bottom|margin|padding|maxHeight|fontSize)/.test(p)))];
   window.scrollTo(0, 0);
-  const long = (window.__mt?.loaf ?? []).filter(([s, d, scripts]) => s >= from && d > limit && ((scripts ?? []).some((x) => x.url) || d >= strongMs)).map(([, d, scripts]) => ({ duration: Math.round(d), scripts }));
-  return { sections: sections.slice(0, 30).map((s) => ({ section: (s.querySelector('h2, h3')?.textContent ?? s.tagName).trim().slice(0, 40), animated: moved.has(s) })), long, keyframeLayout, scrollers: inner.length };
+  const loaf = (window.__mt?.loaf ?? []).filter(([s]) => s >= from);
+  return { sections: sections.slice(0, 30).map((s) => ({ section: (s.querySelector('h2, h3')?.textContent ?? s.tagName).trim().slice(0, 40), animated: moved.has(s) })), loaf, keyframeLayout, scrollers: inner.length };
 };
 
 // Text and images laid out but at opacity 0 (after the page was scrolled end to end).

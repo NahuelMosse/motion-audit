@@ -3,10 +3,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, INTERACTIVE, LONG_FRAME_MS, LONG_FRAME_UNATTRIBUTED_MS, MAX_TOGGLES, SCHEMA_VERSION,
+  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, INTERACTIVE, LONG_FRAME_MS, MAX_TOGGLES, RECOUNT_AFTER_MS, SCHEMA_VERSION,
   SCROLL_STEP_MS, SCROLL_STEP_PX, SCROLL_TAIL_MS, TOGGLE, VIEWPORT,
 } from './constants.mjs';
-import { AuditError, TRACER_CONFIG, createPseudoStates, describeLong, load, sameLocation } from './browser.mjs';
+import { UsageError } from './args.mjs';
+import { AuditError, TRACER_CONFIG, createPixelComparer, createPseudoStates, describeLong, load, longFramesBetween, sameLocation } from './browser.mjs';
 import { baselineIds, readReport } from './compare.mjs';
 import { finalize, loadConfig, validateConfig } from './config.mjs';
 import { inconsistencies, judgeElement } from './judge.mjs';
@@ -15,7 +16,7 @@ import { tracer } from './page-tracer.mjs';
 import { loadPlaywright } from './playwright.mjs';
 import { auditElement, clickMeasurer, contactSheet, eligibleToggles, probeToggle, reducedPass } from './probes.mjs';
 
-const SCROLL_OPTIONS = { step: SCROLL_STEP_PX, stepMs: SCROLL_STEP_MS, tail: SCROLL_TAIL_MS, limit: LONG_FRAME_MS, strongMs: LONG_FRAME_UNATTRIBUTED_MS, maxScrollers: 5 };
+const SCROLL_OPTIONS = { step: SCROLL_STEP_PX, stepMs: SCROLL_STEP_MS, tail: SCROLL_TAIL_MS, maxScrollers: 5 };
 const MAX_SKIP_EXAMPLES = 3;
 
 // Flaky aspects of a measurement are kept only when most of CONFIRM_RUNS runs agree.
@@ -64,12 +65,15 @@ export const audit = async (pageOrUrl, o = {}) => {
   let context;
   let page;
   let url;
+  let initScript = null;
+  let throttle = null;
+  let pixels = null;
   if (isPage) {
     page = pageOrUrl;
     context = page.context();
     url = o.url ?? page.url();
     if (!url || url === 'about:blank') throw new AuditError('the page has not been navigated: pass options.url or call page.goto() first');
-    await page.addInitScript(tracer, TRACER_CONFIG);
+    initScript = await page.addInitScript(tracer, TRACER_CONFIG);
   } else {
     url = pageOrUrl;
     const { chromium } = loadPlaywright();
@@ -80,13 +84,17 @@ export const audit = async (pageOrUrl, o = {}) => {
   }
   const notes = [];
   try {
-    if (o.cpu > 1) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: o.cpu });
-    const loadOptions = { waitFor: o.waitFor };
+    if (o.cpu > 1) {
+      throttle = await context.newCDPSession(page);
+      await throttle.send('Emulation.setCPUThrottlingRate', { rate: o.cpu });
+    }
+    const loadOptions = { waitFor: o.waitFor, allowRedirect: Boolean(o.allowRedirect) };
     const first = await load(page, url, loadOptions);
-    const landed = page.url();
+    const landed = first.landed;
     if (first.redirected) notes.push(`${url} redirected to ${landed}`);
     const pseudo = await createPseudoStates(context, page);
-    const ctx = { page, context, pseudo, url, interact: Boolean(o.interact), loadOptions, notes };
+    pixels = await createPixelComparer(context);
+    const ctx = { page, context, pseudo, pixels, url, interact: Boolean(o.interact), loadOptions, notes };
     const devServer = await page.evaluate(devSignals);
     if (devServer.length) notes.push(`development build detected (${devServer.join(', ')}): long frames are reported as warnings; audit a production build (next start, vite preview) for them to count`);
     const loafSupported = await page.evaluate(() => window.__mt.loafSupported);
@@ -100,17 +108,21 @@ export const audit = async (pageOrUrl, o = {}) => {
     };
 
     // Scroll the page end to end: entrances, long frames, content that stays invisible.
-    let scroll = await page.evaluate(scrollPass, SCROLL_OPTIONS);
+    const scrollOnce = async () => { const r = await page.evaluate(scrollPass, SCROLL_OPTIONS); return { ...r, long: longFramesBetween(r.loaf, 0) }; };
+    let scroll = await scrollOnce();
     if (scroll.long.length) {
       const later = [];
-      for (let i = 1; i < CONFIRM_RUNS; i++) later.push(await page.evaluate(scrollPass, SCROLL_OPTIONS));
+      for (let i = 1; i < CONFIRM_RUNS; i++) later.push(await scrollOnce());
       if (1 + later.filter((r) => r.long.length).length < CONFIRM_MAJORITY) scroll = { ...scroll, long: [] };
     }
     const hiddenNormally = new Set(await page.evaluate(invisibleContent));
 
     // Controls.
-    await load(page, url, loadOptions);
-    const handles = o.only?.length ? (await Promise.all(o.only.map((s) => page.$$(s)))).flat() : await page.$$(INTERACTIVE);
+    const controlsLoad = await load(page, url, loadOptions);
+    const findHandles = async () => (o.only?.length ? (await Promise.all(o.only.map(async (s) => {
+      try { return await page.$$(s); } catch (e) { throw new UsageError(`--only "${s}" is not a valid selector: ${e.message.split('\n')[0]}`); }
+    }))).flat() : page.$$(INTERACTIVE));
+    const handles = await findHandles();
     coverage.candidates = handles.length;
     const elements = [];
     const targets = [];
@@ -149,11 +161,29 @@ export const audit = async (pageOrUrl, o = {}) => {
           await load(page, url, loadOptions);
         }
       } catch (e) {
+        if (o.interact && /context was destroyed|navigat/i.test(e.message)) await page.waitForTimeout(400);
+        if (o.interact && !sameLocation(page.url(), landed)) {
+          // A gesture navigated (a link that routes on mousedown): not an error of the control.
+          navigated = true;
+          notes.push(`interacting with ${label ?? 'a control'} navigated to ${page.url()}: audit stopped there; the controls after it were not audited`);
+          skip('page navigated during the audit');
+          await load(page, url, loadOptions);
+          continue;
+        }
         coverage.errored++;
         skip('error', `${label ?? 'element'}: ${e.message.split('\n')[0].slice(0, 90)}`);
       }
     }
     coverage.audited = elements.length;
+
+    // Controls that arrive later than the first count are not covered: say so instead of reporting "N of N".
+    {
+      const age = Date.now() - controlsLoad.loadedAt;
+      if (!navigated && age < RECOUNT_AFTER_MS) await page.waitForTimeout(RECOUNT_AFTER_MS - age);
+      const now = navigated ? handles.length : (await findHandles()).length;
+      coverage.late = Math.max(0, now - handles.length);
+      if (coverage.late) notes.push(`${coverage.late} controls appeared after the audit counted ${handles.length}: the page renders late, so the audit is incomplete. Re-run with --wait-for <selector of a late control>`);
+    }
 
     const css = await page.evaluate(ungatedHoverMotion);
     const reducedRule = await page.evaluate(hasReducedMotionRule);
@@ -254,14 +284,24 @@ export const audit = async (pageOrUrl, o = {}) => {
     writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 1));
     return { ...report, out };
   } finally {
+    await pixels?.close();
     if (browser) await browser.close();
+    else {
+      // The page belongs to the caller: leave it as it was found.
+      if (throttle) {
+        await throttle.send('Emulation.setCPUThrottlingRate', { rate: 1 }).catch(() => {});
+        await throttle.detach().catch(() => {});
+      }
+      await initScript?.dispose?.().catch(() => {});
+      await page.evaluate(() => window.__mt?.dispose?.()).catch(() => {});
+    }
   }
 };
 
 // 0 clean, 1 findings that fail, 2 the audit did not cover enough to mean anything.
 export const exitCode = (report, { strict = false, minCoverage } = {}) => {
   const { candidates, audited } = report.coverage;
-  if (audited === 0) return 2;
+  if (audited === 0 || report.coverage.late > 0) return 2;
   if (minCoverage !== undefined && audited / candidates < minCoverage) return 2;
   return report.findings.some((f) => f.level === 'error' || (strict && f.level === 'warning')) ? 1 : 0;
 };
