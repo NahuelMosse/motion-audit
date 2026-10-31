@@ -191,7 +191,6 @@
     "exit": 1,
     "findings": [
       "error|long-frame:8847e7193e|button#density \"Density\"",
-      "error|long-frame:c26642dc52|button#density \"Density\"",
       "error|long-frame:fae685ea21|button#density \"Density\""
     ]
   },

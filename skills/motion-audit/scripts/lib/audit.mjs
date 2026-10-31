@@ -32,14 +32,16 @@ const confirm = async (first, aspects, rerun) => {
 };
 
 const jumpKeys = (el) => Object.entries(el.moments).flatMap(([m, d]) => d.motion.flatMap((e) => e.moves.flatMap((mv) => mv.jumps.map(() => `${m}|${e.label}|${mv.prop}`))));
-const ELEMENT_ASPECTS = {
-  long: (e) => e.long.length > 0,
+// Long frames are confirmed per gesture: a frame that shows up in the press of one run and in the
+// focus of the next is two borderline frames, not one confirmed long frame.
+const elementAspects = (first) => ({
+  ...Object.fromEntries([...new Set(first.long.map((l) => l.moment))].map((m) => [`long:${m}`, (e) => e.long.some((l) => l.moment === m)])),
   interrupt: (e) => (e.interrupt?.length ?? 0) > 0,
   jump: (e) => jumpKeys(e).length > 0,
-};
+});
 const dropUnconfirmed = (el) => {
   for (const name of el.unconfirmed ?? []) {
-    if (name === 'long') el.long = [];
+    if (name.startsWith('long:')) el.long = el.long.filter((l) => l.moment !== name.slice(5));
     if (name === 'interrupt') el.interrupt = [];
     if (name === 'jump') for (const d of Object.values(el.moments)) for (const e of d.motion) for (const m of e.moves) m.jumps = [];
   }
@@ -146,7 +148,7 @@ export const audit = async (pageOrUrl, o = {}) => {
         const result = await auditElement(ctx, h, unique, { hoverOnly: reach.state === 'hover-only' });
         if (result.skipped) { skip(result.skipped, label); continue; }
         const { el } = result;
-        await confirm(el, ELEMENT_ASPECTS, async () => {
+        await confirm(el, elementAspects(el), async () => {
           const again = await auditElement(ctx, h, unique, { hoverOnly: reach.state === 'hover-only' });
           return again.el ?? null;
         });
