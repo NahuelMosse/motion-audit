@@ -45,7 +45,8 @@ test('a Playwright older than 1.59 is refused with the reason', () => {
 test('audit(page) refuses a page whose Playwright cannot remove the tracer it installs (before 1.59)', async () => {
   const { audit } = await import('../skills/motion-audit/scripts/lib/index.mjs');
   const calls = [];
-  const old = { goto: async () => {}, url: () => 'http://127.0.0.1:1/', context: () => ({}), addInitScript: async () => { calls.push('addInitScript'); } };
+  const old = { goto: async () => {}, url: () => 'http://127.0.0.1:1/', context: () => ({}), addInitScript: async (script) => { calls.push(String(script)); } };
   await assert.rejects(() => audit(old, {}), /needs Playwright 1\.59 or later/);
-  assert.deepEqual(calls, ['addInitScript']);
+  assert.equal(calls.length, 1, 'only the probe was added');
+  assert.equal(calls[0], '() => {}', 'the tracer was never added');
 });

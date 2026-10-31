@@ -76,9 +76,12 @@ export const audit = async (pageOrUrl, o = {}) => {
     context = page.context();
     url = o.url ?? page.url();
     if (!url || url === 'about:blank') throw new AuditError('the page has not been navigated: pass options.url or call page.goto() first');
+    // Before Playwright 1.59 addInitScript returns nothing and a script cannot be removed: find out with an empty
+    // one (harmless if left behind) before the tracer is added.
+    const probe = await page.addInitScript(() => {});
+    if (typeof probe?.dispose !== 'function') throw new AuditError(`audit(page) needs Playwright ${MIN_PLAYWRIGHT.join('.')} or later: the page's Playwright cannot remove the tracer it installs (addInitScript returned no Disposable). Upgrade it, or pass a URL`);
+    await probe.dispose();
     initScript = await page.addInitScript(tracer, TRACER_CONFIG);
-    // Before Playwright 1.59 addInitScript returns nothing: the tracer could not be removed from the caller's page.
-    if (typeof initScript?.dispose !== 'function') throw new AuditError(`audit(page) needs Playwright ${MIN_PLAYWRIGHT.join('.')} or later: the page's Playwright cannot remove the tracer it installs (addInitScript returned no Disposable). Upgrade it, or pass a URL`);
   } else {
     url = pageOrUrl;
     const { chromium } = loadPlaywright();
