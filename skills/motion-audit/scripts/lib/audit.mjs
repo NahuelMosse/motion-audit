@@ -70,6 +70,7 @@ export const audit = async (pageOrUrl, o = {}) => {
   let initScript = null;
   let throttle = null;
   let pixels = null;
+  let pseudo = null;
   if (isPage) {
     page = pageOrUrl;
     context = page.context();
@@ -94,7 +95,7 @@ export const audit = async (pageOrUrl, o = {}) => {
     const first = await load(page, url, loadOptions);
     const landed = first.landed;
     if (first.redirected) notes.push(`${url} redirected to ${landed}`);
-    const pseudo = await createPseudoStates(context, page);
+    pseudo = await createPseudoStates(context, page);
     pixels = await createPixelComparer(context);
     const noise = Math.max(await calibrateFrames(context), await idleFrameNoise(page));
     const unattributedMs = Math.max(noise >= LONG_FRAME_MS ? NOISY_UNATTRIBUTED_MS : LONG_FRAME_MS, Math.ceil(noise * FRAME_NOISE_FACTOR));
@@ -306,12 +307,13 @@ export const audit = async (pageOrUrl, o = {}) => {
     await pixels?.close();
     if (browser) await browser.close();
     else {
+      await pseudo?.detach();
       // The page belongs to the caller: leave it as it was found.
       if (throttle) {
         await throttle.send('Emulation.setCPUThrottlingRate', { rate: 1 }).catch(() => {});
         await throttle.detach().catch(() => {});
       }
-      await initScript?.dispose?.().catch(() => {});
+      await initScript?.dispose().catch(() => {});
       await page.evaluate(() => window.__mt?.dispose?.()).catch(() => {});
     }
   }

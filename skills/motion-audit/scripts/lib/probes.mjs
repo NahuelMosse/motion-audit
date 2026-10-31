@@ -345,11 +345,12 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
 export const reducedPass = async (ctx, targets) => {
   const { context, url } = ctx;
   const page = await auxPage(context, { session: true });
+  let pseudo = null;
   try {
     await page.setViewportSize(ctx.viewport ?? VIEWPORT);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await load(page, url, ctx.loadOptions);
-    const pseudo = await createPseudoStates(page.context(), page);
+    pseudo = await createPseudoStates(page.context(), page);
     const per = new Map();
     for (const { path, real, label } of targets) {
       const h = await page.$(path);
@@ -380,6 +381,7 @@ export const reducedPass = async (ctx, targets) => {
     const infinite = await page.evaluate(infiniteAnimations, { spinnerPx: REDUCED_LOOP_SPINNER_PX });
     return { per, hidden, infinite };
   } finally {
+    await pseudo?.detach();
     await page.close();
   }
 };

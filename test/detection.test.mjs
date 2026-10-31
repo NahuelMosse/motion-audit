@@ -138,10 +138,23 @@ test('audit(page) leaves the page as it found it: CPU throttle off, tracer stopp
   const page = await context.newPage();
   try {
     await page.goto(`${srv.url}/shadcn.html`);
+    // Every CDP session the audit opens on the caller's context must be detached when it ends.
+    const sessions = [];
+    const open = context.newCDPSession.bind(context);
+    context.newCDPSession = async (target) => {
+      const session = await open(target);
+      const detach = session.detach.bind(session);
+      const entry = { detached: false };
+      session.detach = async () => { entry.detached = true; return detach(); };
+      sessions.push(entry);
+      return session;
+    };
     const spin = () => page.evaluate(() => { const t = performance.now(); let x = 0; for (let i = 0; i < 4e7; i++) x += i % 7; return performance.now() - t + x * 0; });
     await spin();
     const before = Math.min(await spin(), await spin());
     await audit(page, { url: `${srv.url}/shadcn.html`, cpu: 4, max: 1 });
+    assert.ok(sessions.length >= 2, `${sessions.length} sessions opened (throttle and pseudo-states)`);
+    assert.deepEqual(sessions.filter((s) => !s.detached), [], 'a CDP session was left attached');
     const after = Math.min(await spin(), await spin(), await spin());
     assert.ok(after < before * 2, `still throttled: ${Math.round(before)} ms before, ${Math.round(after)} ms after`);
     assert.equal(await page.evaluate(() => typeof window.__mt), 'undefined');

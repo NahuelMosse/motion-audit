@@ -24,7 +24,7 @@ export const INTERRUPT_RETRIES = 3;
 export const CLICK_UNSURE_MAX_DT_MS = 4 * FRAME_MS;
 export const CALIBRATION_CYCLES = 6;
 export const IDLE_NOISE_MS = 1000;
-export const MIN_PLAYWRIGHT = [1, 43];
+export const MIN_PLAYWRIGHT = [1, 59];
 export const SCHEMA_VERSION = 1;
 
 export const DEFAULT_MAX_ELEMENTS = 40;

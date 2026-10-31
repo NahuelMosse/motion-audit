@@ -197,7 +197,7 @@ Or the CLI: `npx motion-audit http://localhost:3000/orders --max 200 --min-cover
 
 - Chromium only. Safari renders some transitions differently; check gesture-heavy UI there by hand.
 - Colour and shadow transitions are judged from computed styles and pixels, not traced per frame.
-- Long Animation Frames need Chromium 123+ (Playwright 1.43+); when unsupported the report says
+- Long Animation Frames need Chromium 123+; when unsupported the report says
   `loafSupported: false` - never read that as clean.
 - Cross-origin stylesheets (and linked ones under `file://`) cannot be read for the `:hover` and
   reduced-motion rule checks: they are counted, and `reduced-motion-missing` becomes `info` with the count.

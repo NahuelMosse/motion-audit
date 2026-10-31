@@ -29,7 +29,7 @@ claude plugin marketplace update motion-audit
 claude plugin update motion-audit@motion-audit
 ```
 
-The skill needs Node 22.12+ and Playwright 1.43+ with Chromium in the project you audit
+The skill needs Node 22.12+ and Playwright 1.59+ with Chromium in the project you audit
 (`npm i -D playwright && npx playwright install chromium`). Set `PLAYWRIGHT_ROOT` to a project that has
 it when the audited project does not.
 

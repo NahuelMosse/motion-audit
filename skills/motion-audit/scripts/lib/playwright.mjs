@@ -28,7 +28,7 @@ export const loadPlaywright = (env = process.env, cwd = process.cwd()) => {
       if (!mod?.chromium) continue;
       let version = null;
       try { version = req(`${name}/package.json`).version; } catch (e) { if (e?.code !== 'MODULE_NOT_FOUND' && e?.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED') throw e; }
-      if (version && !versionAtLeast(version)) throw new Error(`${name} ${version} under ${root} is too old: motion-audit needs Playwright >= ${MIN_PLAYWRIGHT.join('.')} (Long Animation Frames)`);
+      if (version && !versionAtLeast(version)) throw new Error(`${name} ${version} under ${root} is too old: motion-audit needs Playwright >= ${MIN_PLAYWRIGHT.join('.')} (page.addInitScript returns the Disposable that removes the tracer from a page passed to audit())`);
       return { chromium: mod.chromium, version, from: root };
     }
   }

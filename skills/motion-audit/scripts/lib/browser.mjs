@@ -137,6 +137,7 @@ export const createPseudoStates = async (context, page) => {
       return ids;
     },
     async clear(ids) { for (const { id } of ids) await session.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: [] }); },
+    detach: () => session.detach().catch(() => {}),
     session,
   };
 };

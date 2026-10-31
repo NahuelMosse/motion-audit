@@ -23,7 +23,7 @@ First release as an installable plugin and package.
 - JSON report `schemaVersion: 1` with coverage and `loafSupported`; stable `kind:hash` finding ids,
   `--baseline`, `compare <ref.json> <mine.json>`.
 - Argument validation (`--help` exits 0, unknown options and invalid numbers exit 2); Playwright is
-  resolved from `PLAYWRIGHT_ROOT`, then the working directory, with real load errors surfaced and a 1.43
+  resolved from `PLAYWRIGHT_ROOT`, then the working directory, with real load errors surfaced and a 1.59
   minimum; reports go to a temp directory unless `--out` is given.
 - Packaging: Claude Code plugin and marketplace manifests, `references/fixes.md`, trigger evals, unit and
   fixture tests, CI on Linux, Windows and macOS.

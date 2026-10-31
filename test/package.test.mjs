@@ -14,6 +14,12 @@ test('the Playwright dev dependency is a caret range and the lockfile is past 1.
   assert.ok(major > 1 || minor > 43, `locked playwright ${lock.packages['node_modules/playwright'].version}`);
 });
 
+test('the Playwright peer range starts at the minimum the code enforces (1.59: addInitScript returns a Disposable)', async () => {
+  const { MIN_PLAYWRIGHT } = await import('../skills/motion-audit/scripts/lib/constants.mjs');
+  assert.equal(pkg.peerDependencies.playwright, `>=${MIN_PLAYWRIGHT.join('.')}`);
+  assert.deepEqual(MIN_PLAYWRIGHT, [1, 59]);
+});
+
 test('every test file is in exactly one of test:unit and test:browser, so no CI job silently drops it', () => {
   const files = readdirSync(join(ROOT, 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `test/${f}`).sort();
   const listed = (script) => pkg.scripts[script].split(' ').filter((x) => x.endsWith('.test.mjs')).sort();
