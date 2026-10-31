@@ -1,7 +1,7 @@
 // The gestures: what one control, one toggle, one click target and the reduced-motion pass do.
 import { join } from 'node:path';
 import {
-  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CONTACT_SHEET_STEP_MS, DENY_HREF, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
+  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, DENY_HREF, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
   HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
   REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
@@ -10,7 +10,7 @@ import { createPseudoStates, diff, load, longFramesBetween, longWindows, shot, s
 import { interruptionJumps } from './continuity.mjs';
 import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
-import { analyzeRecording } from './series.mjs';
+import { analyzeRecording, animatedMove } from './series.mjs';
 
 const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source, flags: DENY_TEXT.flags, href: DENY_HREF.source, named: NAMED_CONTROL };
 const asElement = (jsHandle) => jsHandle.asElement();
@@ -140,7 +140,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
       await page.mouse.move(1, 1);
       await settle(proxy);
       const rec = await page.evaluate(() => window.__mt.end('i'));
-      const frames = longWindows(await page.evaluate(() => window.__mt.loaf), interruptFrom);
+      const frames = longWindows(await page.evaluate(() => window.__mt.loaf), interruptFrom, unattributedLimit(page));
       el.interrupt = rec?.marks.length ? interruptionJumps(rec, rec.marks[0], { durationMs: hoverMs, small: true, longFrames: frames }) : [];
     }
   }
@@ -265,18 +265,29 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
   const measure = async () => {
     const quiet = await attempt(false);
     if (quiet.missing) return quiet;
-    const traced2 = await attempt(true);
-    if (traced2.missing) return traced2;
-    const rec = traced2.rec;
     // What was already moving before the click (loops, carousels) is ambient, not the click's motion.
-    const clickT = rec.marks[0] ?? Infinity;
-    const moved = analyzeRecording(rec, { longFrames: longWindows(traced2.loaf, traced2.from) }).map((e) => ({ ...e, moves: e.moves.filter((m) => m.firstT >= clickT - 2 * FRAME_MS) })).filter((e) => e.moves.length);
+    const analyze = (t) => {
+      const clickT = t.rec.marks[0] ?? Infinity;
+      return analyzeRecording(t.rec, { longFrames: longWindows(t.loaf, t.from, unattributedLimit(page)) }).map((e) => ({ ...e, moves: e.moves.filter((m) => m.firstT >= clickT - 2 * FRAME_MS) })).filter((e) => e.moves.length);
+    };
+    let traced2 = await attempt(true);
+    if (traced2.missing) return traced2;
+    let moved = analyze(traced2);
+    // A step that only a frame too long to judge keeps from being a jump is recorded again: a machine that
+    // drops frames rarely drops the same one every time.
+    for (let again = 0; again < CLICK_RESOLVE_RETRIES && !moved.some((e) => e.moves.some((m) => m.jumps.length)) && moved.some((e) => e.moves.some((m) => m.unresolved)); again++) {
+      const next = await attempt(true);
+      if (next.missing) break;
+      traced2 = next;
+      moved = analyze(traced2);
+    }
+    const rec = traced2.rec;
     return {
       moved,
       long: longFramesBetween(quiet.loaf, quiet.from, Infinity, unattributedLimit(page)),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
-      layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && m.durationMs > 2 * FRAME_MS).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
-      interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from) }) : [],
+      layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
+      interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from, unattributedLimit(page)) }) : [],
       mounted: rec.mounted,
     };
   };

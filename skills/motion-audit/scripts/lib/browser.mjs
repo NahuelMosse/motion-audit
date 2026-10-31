@@ -20,7 +20,7 @@ export const traced = async (page, root, action) => {
   const rec = await page.evaluate(() => window.__mt.end('m'));
   const to = await page.evaluate(() => window.__mt.now());
   const loaf = await page.evaluate(() => window.__mt.loaf);
-  return { rec, motion: analyzeRecording(rec, { longFrames: longWindows(loaf, from) }), long: longFramesBetween(loaf, from, to, unattributedLimit(page)) };
+  return { rec, motion: analyzeRecording(rec, { longFrames: longWindows(loaf, from, unattributedLimit(page)) }), long: longFramesBetween(loaf, from, to, unattributedLimit(page)) };
 };
 
 // How long a frame with no application script must be to count: LONG_FRAME_MS, or more on a machine
@@ -74,12 +74,16 @@ const auditWork = (scripts) => scripts.filter((s) => !s.url).reduce((sum, s) => 
 // Long frames (over LONG_FRAME_MS) in [from, to] that are the page's: what is left of a frame once
 // the audit's own script time is taken out. Frames with no script at all (style, layout, paint) count
 // when they are over `unattributedMs`.
+const pageOwned = (d, scripts, unattributedMs) => d - auditWork(scripts) > (scripts.some((x) => x.url) ? LONG_FRAME_MS : unattributedMs);
 export const longFramesBetween = (loaf, from, to = Infinity, unattributedMs = LONG_FRAME_MS) => loaf
-  .filter(([s, d, scripts]) => s + d >= from && s <= to && d - auditWork(scripts ?? []) > ((scripts ?? []).some((x) => x.url) ? LONG_FRAME_MS : unattributedMs))
+  .filter(([s, d, scripts]) => s + d >= from && s <= to && pageOwned(d, scripts ?? [], unattributedMs))
   .map(([, d, scripts]) => ({ duration: Math.round(d), scripts: (scripts ?? []).filter((x) => x.url) }));
 
-// [[start, duration]] of every long frame that ends after `from`, whoever caused it.
-export const longWindows = (loaf, from) => loaf.filter(([s, d]) => d > LONG_FRAME_MS && s + d >= from).map(([s, d]) => [s, d]);
+// [[start, duration]] of the page's long frames (the ones longFramesBetween reports) that end after `from`:
+// a step in one of them is that frame. A frame no longer than the machine's own noise explains nothing.
+export const longWindows = (loaf, from, unattributedMs = LONG_FRAME_MS) => loaf
+  .filter(([s, d, scripts]) => s + d >= from && pageOwned(d, scripts ?? [], unattributedMs))
+  .map(([s, d]) => [s, d]);
 
 // Which scripts a long frame is attributed to, from the LoAF `scripts[]`.
 export const describeLong = (long) => {

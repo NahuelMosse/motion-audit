@@ -36,6 +36,8 @@ export const INTERRUPT_MIN_MOTION_MS = 80;
 export const INTERRUPT_LEAD_MS = 80;
 export const CLICK_LEAD_MS = 120;
 export const CLICK_RECORD_MS = 1500;
+// A click recording whose only jump candidate fell in a frame too long to judge is recorded again, at most this many times.
+export const CLICK_RESOLVE_RETRIES = 4;
 export const CLICK_INTERRUPT_MS = 160;
 export const SCROLL_STEP_PX = 160;
 export const SCROLL_STEP_MS = 90;
@@ -81,8 +83,8 @@ export const RESTART_WINDOW = 3;
 export const SMALL_MIN_SHARE = 0.2;
 export const SMALL_STEP_EPS_FACTOR = 2;
 export const RESTART_EVENT_SLACK_MS = 3 * FRAME_MS;
-// A node removed and a same-kind node mounted in the same parent within this time are one re-mounted component.
-export const REMOUNT_GAP_MS = 4 * FRAME_MS;
+// A node removed and a same-kind node mounted in the same parent within this many frames are one re-mounted component.
+export const REMOUNT_GAP_FRAMES = 4;
 // A step next to a long frame is that frame, not a jump (the animation clock ran ahead while the thread was blocked).
 export const LONG_FRAME_STEP_SLACK_MS = 2 * FRAME_MS;
 export const JUMP_MIN_STEP = { left: 24, top: 24, width: 24, height: 24, tx: 24, ty: 24, opacity: 0.4, sx: 0.3, sy: 0.3 };

@@ -1,6 +1,6 @@
 // Turns what was measured on one element into findings. Pure: no browser, no config file.
-import { BANDS, EASE_IN_MIN_MS, FRAME_MS, INCONSISTENT_MIN_GAP_MS, INCONSISTENT_RATIO, LAYOUT_PROPS } from './constants.mjs';
-import { easingKind } from './series.mjs';
+import { BANDS, EASE_IN_MIN_MS, INCONSISTENT_MIN_GAP_MS, INCONSISTENT_RATIO, LAYOUT_PROPS } from './constants.mjs';
+import { animatedMove, easingKind } from './series.mjs';
 
 // The declared duration and easing of the transition that animates `prop`, or null if none does.
 export const transitionOf = (tr, prop) => {
@@ -40,7 +40,7 @@ export const judgeElement = (el, policy = {}) => {
     }
     const visual = d.changed.filter((p) => !/^outline/.test(p));
     const animated = visual.filter((p) => transitionOf(tr, p)?.duration > 0);
-    const measured = d.motion.some((m) => m.moves.some((x) => x.durationMs > 2 * FRAME_MS));
+    const measured = d.motion.some((m) => m.moves.some(animatedMove));
     if (moment !== 'focus' && visual.length && !animated.length && !measured) add('snaps', `${moment}: ${visual.join(', ')} change with no transition`, moment);
     for (const p of animated) {
       const { duration, easing } = transitionOf(tr, p);
@@ -51,11 +51,11 @@ export const judgeElement = (el, policy = {}) => {
       if (k === 'linear' && /transform|scale|translate|opacity/.test(p)) add('linear', `${moment}: ${p} moves linearly`, p);
     }
     const layout = animated.filter((p) => LAYOUT_PROPS.test(p));
-    const measuredLayout = d.motion.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && m.durationMs > 2 * FRAME_MS).map((m) => `${e.label} ${m.prop}`));
+    const measuredLayout = d.motion.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => `${e.label} ${m.prop}`));
     if (layout.length || measuredLayout.length) add('layout-animated', `${moment}: animates layout (${[...layout, ...measuredLayout].join(', ')}): moves neighbours and costs layout every frame`, moment);
     if (!animated.length) {
       for (const e of d.motion) for (const m of e.moves) {
-        if (m.shape === 'linear' && /^(translate|scale|opacity)/.test(m.prop) && m.durationMs > 2 * FRAME_MS) add('linear', `${moment}: ${e.label} ${m.prop} moves linearly (measured)`, `measured ${e.label} ${m.prop}`);
+        if (m.shape === 'linear' && /^(translate|scale|opacity)/.test(m.prop) && animatedMove(m)) add('linear', `${moment}: ${e.label} ${m.prop} moves linearly (measured)`, `measured ${e.label} ${m.prop}`);
       }
     }
     for (const e of d.motion) for (const m of e.moves) {

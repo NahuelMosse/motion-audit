@@ -92,6 +92,10 @@ export const tracer = (cfg) => {
     return true;
   };
 
+  // The next sample is requested once this frame has been drawn, so in the next frame it runs after the
+  // callbacks the page requested during this one: it reads what that frame shows, not the frame before.
+  const after = new MessageChannel();
+  after.port1.onmessage = () => requestAnimationFrame(frame);
   const frame = (ts) => {
     for (const rec of active()) {
       scanAnimations(rec, ts);
@@ -109,7 +113,7 @@ export const tracer = (cfg) => {
         COLS.forEach((c, i) => e[c].push(p[i]));
       }
     }
-    if (active().length) requestAnimationFrame(frame); else running = false;
+    if (active().length) after.port2.postMessage(0); else running = false;
   };
 
   const onClick = (e) => { for (const r of active()) r.marks.push(e.timeStamp); };
@@ -167,6 +171,7 @@ export const tracer = (cfg) => {
       for (const r of recs.values()) r.active = false;
       recs.clear();
       mounts.disconnect();
+      after.port1.close();
       loafObserver?.disconnect();
       document.removeEventListener('click', onClick, true);
       delete window.__mt;

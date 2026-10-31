@@ -19,7 +19,7 @@
 <div id="box"></div>
 <script>
   // Moves 300 px in 600 ms but skips 250 px at the half-way point (a skip that large is provable
-  // even from frames 90 ms apart).
+  // from frames up to 50 ms apart, the threshold of a long frame).
   document.getElementById('go').addEventListener('click', () => {
     const box = document.getElementById('box');
     const start = performance.now();

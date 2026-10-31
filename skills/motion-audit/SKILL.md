@@ -200,6 +200,9 @@ Or the CLI: `npx motion-audit http://localhost:3000/orders --max 200 --min-cover
   separate series.
 - Long frames are the page's own: the time of the audit's injected scripts (the tracer, `page.evaluate`)
   is taken out of each frame, so a heavy page under heavy machine load can still show an unattributed one.
+- On a machine that drops frames (a loaded or virtualised runner), a teleport that lands in a frame of 66 ms or
+  more is indistinguishable from a steep easing: the audit re-records the click while some steps are
+  undecidable, and can still miss it.
 - Shadow DOM and iframes are not entered; canvas and WebGL motion is not measured.
 - Durations are compared within the same element kind (`button`, `a`, `tab`...): put deliberate
   differences in `tokens.durations` or ignore them with a reason.

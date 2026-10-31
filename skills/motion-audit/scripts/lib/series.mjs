@@ -1,5 +1,5 @@
 // Pure trajectory analysis: one property sampled over time, curve classification, jump detection.
-import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_MS } from './constants.mjs';
+import { LONG_FRAME_STEP_SLACK_MS, FRAME_MS, SERIES_JUMP_MAX_DT_MS, SERIES_PEAK_SLOPE, SERIES_NEIGHBOUR_RATIO, JUMP_MIN_SHARE, OVERSHOOT_SPRING_PCT, REMOUNT_GAP_FRAMES } from './constants.mjs';
 
 export const round = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
 export const median = (a) => {
@@ -33,9 +33,11 @@ export const unwrap = (v) => v.reduce((out, x, i) => {
 // step that is a sizeable share of the amplitude and moves several times faster than the average
 // speed of the whole motion (no easing curve peaks that high after its first interval) and than
 // both short neighbours. The first interval is skipped: an ease-out legitimately starts fastest.
+// `unresolved` counts steps that pass every test but the speed one in an interval too long for it to decide.
 const findJumps = (t, v, start, settle, amp, t0, shape) => {
   const jumps = [];
-  if (settle - start < 4) return jumps;
+  let unresolved = 0;
+  if (settle - start < 4) return { jumps, unresolved };
   const avgVelocity = amp / Math.max(1, t[settle] - t0);
   const peak = SERIES_PEAK_SLOPE * (shape === 'spring' ? 2 : 1);
   const velocity = (k) => {
@@ -43,15 +45,16 @@ const findJumps = (t, v, start, settle, amp, t0, shape) => {
     return dt > 0 && dt <= SERIES_JUMP_MAX_DT_MS ? Math.abs(v[k] - v[k - 1]) / dt : null;
   };
   for (let k = start + 1; k <= settle; k++) {
-    const vel = velocity(k);
-    if (vel === null) continue;
     const step = Math.abs(v[k] - v[k - 1]);
-    if (step < JUMP_MIN_SHARE * amp || vel < peak * avgVelocity) continue;
+    if (step < JUMP_MIN_SHARE * amp) continue;
+    const vel = velocity(k);
+    if (vel === null) { unresolved++; continue; }
     const neighbours = [velocity(k - 1), velocity(k + 1)].filter((x) => x !== null);
     if (neighbours.some((x) => vel < SERIES_NEIGHBOUR_RATIO * x)) continue;
+    if (vel < peak * avgVelocity) { unresolved++; continue; }
     jumps.push({ atMs: round(t[k] - t0, 0), size: round(step, 2) });
   }
-  return jumps;
+  return { jumps, unresolved };
 };
 
 // A round trip (a toast in and out) is judged leg by leg, each against its own amplitude and speed:
@@ -67,11 +70,13 @@ const legJumps = (t, v, eps, t0) => {
   let depart = peak;
   while (depart < v.length - 1 && Math.abs(v[depart + 1] - v[peak]) <= tol) depart++;
   const out = [];
+  let unresolved = 0;
   for (const [a, b] of [[0, arrive], [depart, v.length - 1]]) {
     const leg = analyzeSeries(t.slice(a, b + 1), v.slice(a, b + 1), eps);
     for (const j of leg?.jumps ?? []) out.push({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size });
+    unresolved += leg?.unresolved ?? 0;
   }
-  return out;
+  return { jumps: out, unresolved };
 };
 
 // Steps where one node was replaced by another (`cuts`: indices of the first sample of the new node):
@@ -119,14 +124,16 @@ export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
     shape = [...best.entries()].sort((a, b) => a[1] - b[1])[0][0];
   }
   let jumps;
+  let unresolved = 0;
   if (cuts.length) {
     // Joined nodes are separate motions: each is judged on its own, the joins by cutJumps.
     const bounds = [0, ...cuts, n];
     jumps = bounds.slice(1).flatMap((end, i) => {
       const leg = analyzeSeries(t.slice(bounds[i], end), v.slice(bounds[i], end), eps);
+      unresolved += leg?.unresolved ?? 0;
       return (leg?.jumps ?? []).map((j) => ({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size }));
     }).concat(cutJumps(t, v, cuts, eps, range, t0));
-  } else jumps = shape === 'round-trip' ? legJumps(t, v, eps, t0) : findJumps(t, v, start, settle, amp, t0, shape);
+  } else ({ jumps, unresolved } = shape === 'round-trip' ? legJumps(t, v, eps, t0) : findJumps(t, v, start, settle, amp, t0, shape));
   // A step in a frame that overlaps a long frame is that frame: the animation's clock ran on while the thread was blocked.
   if (longFrames.length) {
     jumps = jumps.filter((j) => {
@@ -135,8 +142,12 @@ export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
       return !longFrames.some(([s, len]) => s <= to + LONG_FRAME_STEP_SLACK_MS && s + len >= from - LONG_FRAME_STEP_SLACK_MS);
     });
   }
-  return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, firstT: t[start], durationMs: round(t[settle] - t0, 0), samples: settle - start + 1, overshootPct, shape, settled, jumps };
+  return { from: round(v[start - 1], 2), to: round(final, 2), startT: t0, firstT: t[start], durationMs: round(t[settle] - t0, 0), samples: settle - start + 1, overshootPct, shape, settled, jumps, unresolved };
 };
+
+// Whether a move is an animation: seen in more than one frame and longer than two 60 Hz frames. A change seen in a
+// single frame is a step however long that frame lasted (a machine that drops frames has 100 ms frames).
+export const animatedMove = (m) => m.samples > 1 && m.durationMs > 2 * FRAME_MS;
 
 export const analyzeElement = (el, longFrames = []) => {
   const moves = [];
@@ -150,19 +161,19 @@ export const analyzeElement = (el, longFrames = []) => {
 const kindOf = (e) => `${e.tag ?? e.label.replace(/[#.].*$/, '').toUpperCase()}|${e.role ?? ''}`;
 
 // A node removed mid-recording and a node of the same tag and role mounted in the same parent within
-// REMOUNT_GAP_MS is one component re-mounted (a changed React `key`): their samples form one series,
+// REMOUNT_GAP_FRAMES is one component re-mounted (a changed React `key`): their samples form one series,
 // with `cuts` at the joins, so the animation that starts over shows as a jump.
 export const joinRemounts = (elems) => {
   if (elems.length < 2) return elems;
-  const end = Math.max(...elems.map((e) => e.t.at(-1)));
-  // The gap that counts as "the next frame" follows the machine's own sampling interval.
-  const interval = Math.max(FRAME_MS, median(elems.flatMap((e) => e.t.slice(1).map((x, i) => x - e.t[i]))));
+  // Every tracked node is sampled in the same frames: gaps are counted in those frames, whatever they lasted.
+  const frames = [...new Set(elems.flatMap((e) => e.t))].sort((x, y) => x - y);
+  const frameOf = new Map(frames.map((x, i) => [x, i]));
   const taken = new Set();
   const next = new Map();
   for (const a of [...elems].sort((x, y) => x.t.at(-1) - y.t.at(-1))) {
-    if (a.root || a.t.at(-1) >= end - 2 * interval) continue;
-    const gap = (b) => b.t[0] - a.t.at(-1);
-    const b = elems.filter((x) => x !== a && !x.root && !taken.has(x) && x.parent === a.parent && kindOf(x) === kindOf(a) && gap(x) > 0 && gap(x) <= Math.max(REMOUNT_GAP_MS, 3 * interval)).sort((x, y) => x.t[0] - y.t[0])[0];
+    if (a.root || frameOf.get(a.t.at(-1)) >= frames.length - 2) continue;
+    const gap = (b) => frameOf.get(b.t[0]) - frameOf.get(a.t.at(-1));
+    const b = elems.filter((x) => x !== a && !x.root && !taken.has(x) && x.parent === a.parent && kindOf(x) === kindOf(a) && gap(x) > 0 && gap(x) <= REMOUNT_GAP_FRAMES).sort((x, y) => x.t[0] - y.t[0])[0];
     if (b) { next.set(a, b); taken.add(b); }
   }
   return elems.filter((e) => !taken.has(e)).map((head) => {
