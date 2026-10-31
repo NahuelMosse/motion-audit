@@ -63,6 +63,11 @@ test('the JSON report carries the schema version, coverage, loafSupported and st
   assert.deepEqual(again.report.findings.map((f) => f.id).sort(), r.report.findings.map((f) => f.id).sort());
 });
 
+test('a failing audit exits exactly 1 and a clean one exactly 0', async () => {
+  assert.equal((await run('bad.html')).code, 1);
+  assert.equal((await run('good.html')).code, 0);
+});
+
 test('an --only selector that matches nothing audits nothing and exits 2', async () => {
   const r = await run('shadcn.html', '--only', '#does-not-exist');
   assert.equal(r.code, 2);
