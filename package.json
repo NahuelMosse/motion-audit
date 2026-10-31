@@ -1,27 +1,56 @@
 {
   "name": "motion-audit",
   "version": "1.0.0",
-  "private": true,
-  "type": "module",
+  "description": "Measures how a running web UI moves, frame by frame, in a real browser: missing hover/press/focus feedback, janky or jumping transitions, long frames and broken reduced motion.",
+  "keywords": [
+    "animation",
+    "motion",
+    "microinteractions",
+    "playwright",
+    "reduced-motion",
+    "performance",
+    "jank",
+    "qa",
+    "cli"
+  ],
   "license": "MIT",
-  "description": "Measures how a running web UI moves, frame by frame, in a real browser.",
   "author": "Nahuel Mosse",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NahuelMosse/motion-audit.git"
+  },
+  "homepage": "https://github.com/NahuelMosse/motion-audit#readme",
+  "bugs": {
+    "url": "https://github.com/NahuelMosse/motion-audit/issues"
+  },
+  "type": "module",
   "bin": {
     "motion-audit": "skills/motion-audit/scripts/motion-audit.mjs"
   },
   "exports": {
-    ".": "./skills/motion-audit/scripts/lib/index.mjs"
+    ".": "./skills/motion-audit/scripts/lib/index.mjs",
+    "./package.json": "./package.json"
   },
+  "files": [
+    "skills/motion-audit",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "engines": {
     "node": ">=22.12"
   },
   "peerDependencies": {
     "playwright": ">=1.59"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "test": "node --test --test-concurrency=2 \"test/**/*.test.mjs\"",
     "test:unit": "node --test test/args.test.mjs test/config.test.mjs test/continuity.test.mjs test/docs.test.mjs test/gates.test.mjs test/press-count.test.mjs test/sightings.test.mjs test/judge.test.mjs test/long-frames.test.mjs test/package.test.mjs test/playwright-resolution.test.mjs test/reduced-and-compare.test.mjs test/segments.test.mjs test/series.test.mjs test/skill-doc.test.mjs",
-    "test:browser": "node --test --test-concurrency=1 test/cli.test.mjs test/detection.test.mjs test/fixtures.test.mjs test/interact-safety.test.mjs test/readme-example.test.mjs test/redirect.test.mjs",
+    "test:browser": "node --test --test-concurrency=1 test/cli.test.mjs test/detection.test.mjs test/fixtures.test.mjs test/package-install.test.mjs test/interact-safety.test.mjs test/readme-example.test.mjs test/redirect.test.mjs",
     "fixtures": "node test/helpers/fixture-runs.mjs 3"
   },
   "devDependencies": {
