@@ -31,3 +31,11 @@ export const CLI_MATRIX = [
   { name: 'late-controls-waited', fixture: 'late-controls.html', args: ['--wait-for', 'button'] },
   { name: 'shadcn-fixed', fixture: 'shadcn-fixed.html', args: [] },
 ];
+
+// Entries whose findings come from JS-driven motion sampled every frame (jumps, measured curves) or
+// from frames near the 50 ms limit. GitHub's macOS runners render well under 30 fps in headless
+// Chromium, which is below what that analysis needs, so their golden comparison runs on Linux and
+// Windows only (Linux also runs each of them three times).
+export const FRAME_RATE_BOUND = new Set([
+  'bad', 'bad-cpu4', 'bad-click', 'drawer-bad', 'drawer-bad-click-interrupt', 'jump', 'kinds', 'kinds-interact', 'remount', 'toast-teleport',
+]);
