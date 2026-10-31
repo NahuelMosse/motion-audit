@@ -193,7 +193,9 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
     const from = await page.evaluate(() => window.__mt.now());
     await wait(page, CLICK_LEAD_MS);
     await page.mouse.click(point.x, point.y);
-    if (interrupt) { await wait(page, CLICK_INTERRUPT_MS); await page.mouse.click(point.x, point.y); }
+    // The second click is dispatched on the element itself: an overlay opened by the first one
+    // (a drawer over its own trigger) would otherwise receive it.
+    if (interrupt) { await wait(page, CLICK_INTERRUPT_MS); await target.evaluate((n) => n.click()); }
     await wait(page, CLICK_RECORD_MS);
     const loaf = await page.evaluate(() => window.__mt.loaf);
     return { from, loaf, rec: trace ? await page.evaluate(() => window.__mt.end('c')) : null };

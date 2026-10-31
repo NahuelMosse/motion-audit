@@ -56,7 +56,6 @@
       "error|ease-in:4ac1b995e3|button \"Save\" in main",
       "error|ease-in:e517b9806a|button \"Save\" in main",
       "error|interrupt-jump:3cd19e037f|button \"Card\" in main",
-      "error|interrupt-jump:56f0ce2d37|click #open",
       "error|layout-animated:77da7c66fb|button \"Save\" in main",
       "error|layout-animated:8ad6b2cc90|click #open",
       "error|layout-animated:ad15a2aeed|click #open",
@@ -171,6 +170,12 @@
     "exit": 0,
     "findings": [
       "warning|long-frame:09f4bf85ad|button#heavy \"Heavy hover\""
+    ]
+  },
+  "drawer-bad-click-interrupt": {
+    "exit": 1,
+    "findings": [
+      "error|interrupt-jump:95c8a8d247|click #toggle"
     ]
   }
 }

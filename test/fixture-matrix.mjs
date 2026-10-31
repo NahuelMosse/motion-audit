@@ -2,7 +2,8 @@
 export const CLI_MATRIX = [
   { name: 'bad', fixture: 'bad.html', args: [] },
   { name: 'bad-cpu4', fixture: 'bad.html', args: ['--cpu', '4'] },
-  { name: 'bad-click', fixture: 'bad.html', args: ['--click', '#open', '--interrupt'] },
+  { name: 'bad-click', fixture: 'bad.html', args: ['--click', '#open'] },
+  { name: 'drawer-bad-click-interrupt', fixture: 'drawer-bad.html', args: ['--click', '#toggle', '--interrupt'] },
   { name: 'good', fixture: 'good.html', args: [] },
   { name: 'drawer-bad', fixture: 'drawer-bad.html', args: ['--interact'] },
   { name: 'drawer-good', fixture: 'drawer-good.html', args: ['--interact'] },
