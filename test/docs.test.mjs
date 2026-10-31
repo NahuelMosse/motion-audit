@@ -10,10 +10,10 @@ const skill = read('skills', 'motion-audit', 'SKILL.md');
 const readme = read('README.md');
 const [, front] = /^---\n([\s\S]*?)\n---/.exec(skill);
 
-const commandLines = (text) => text.split('\n').filter((l) => /^\s*(node|npx) .*--min-coverage/.test(l) || /--min-coverage \d/.test(l));
+const commandLines = (text) => text.split('\n').filter((l) => /^\s*(`?node|`?npx|Or the CLI: `npx) /.test(l) && /--min-coverage \d/.test(l));
 
 test('every example that sets --min-coverage also raises --max, since coverage counts the controls beyond --max', () => {
-  const lines = [...commandLines(skill), ...commandLines(readme)].filter((l) => /--min-coverage \d/.test(l));
+  const lines = [...commandLines(skill), ...commandLines(readme)];
   assert.ok(lines.length >= 2);
   for (const l of lines) assert.match(l, /--max \d+/, l);
 });
@@ -30,7 +30,7 @@ test('every command in the skill is allowed by allowed-tools in either shell', (
   assert.deepEqual([...new Set(allowed)], ['Bash']);
   const blocks = [...skill.matchAll(/```bash\n([\s\S]*?)```/g)].flatMap((m) => m[1].split('\n').filter((l) => l.trim()));
   for (const l of blocks.filter((x) => /^node /.test(x))) assert.match(l, /^node "\$\{CLAUDE_SKILL_DIR\}\/scripts\/motion-audit\.mjs" /, l);
-  assert.match(skill, /same command works in PowerShell/i);
+  assert.match(skill, /same command works in[^.]*PowerShell/i);
 });
 
 test('the docs say what the default mode and --click do to the page', () => {

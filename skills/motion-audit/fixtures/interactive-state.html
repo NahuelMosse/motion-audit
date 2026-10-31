@@ -40,6 +40,11 @@
   document.getElementById('remove-form').addEventListener('submit', (e) => { e.preventDefault(); ping('delete'); });
   document.getElementById('drag').addEventListener('dragstart', () => ping('drag'));
   document.getElementById('volume').addEventListener('pointerdown', () => ping('slider'));
+  // Every change of a state attribute is reported, so a test sees what happened during the run
+  // and not only what a fresh load shows afterwards.
+  new MutationObserver((records) => {
+    for (const r of records) ping('state/' + r.target.id + '/' + r.attributeName + '/' + r.target.getAttribute(r.attributeName));
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['aria-pressed', 'aria-expanded', 'aria-selected'] });
 </script>
 </body>
 </html>

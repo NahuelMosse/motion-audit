@@ -1,6 +1,6 @@
 ---
 name: motion-audit
-description: Measure, in a real browser, how a running web UI moves and find what is wrong with it - controls with no hover, press or keyboard-focus feedback, transitions that snap or jank, long frames, ease-in or off-band durations, animations that jump or restart when interrupted, and broken prefers-reduced-motion. Use when the user asks to audit, test or QA the motion, animations or microinteractions of a running page or app, says it feels janky, dead, stutters or jumps, or asks whether reduced motion works.
+description: Use when the user asks to audit, test or QA the motion, animations or microinteractions of a running page or app, says it feels janky, dead, stutters or jumps, or asks whether reduced motion works. Measures in a real browser what is wrong - no hover, press or focus feedback, snapping or janky transitions, long frames, animations that jump or restart, broken prefers-reduced-motion.
 allowed-tools:
   - Bash(node ${CLAUDE_SKILL_DIR}/scripts/*)
   - Bash(node "${CLAUDE_SKILL_DIR}/scripts/*")
@@ -42,7 +42,7 @@ Levels are the defaults; the config file can change any of them.
 | `hover-only-control` | A control revealed only by pointer hover stays invisible when it gets keyboard focus | warning | pixels |
 | `snaps` | Feedback exists but jumps: the changed properties have no transition | warning | css |
 | `layout-animated` | Width, height, top, margin, padding or font animate: neighbours shift and layout runs every frame | error | frames |
-| `long-frame` | A frame over 50 ms during hover, a click transition or scroll; a warning on a development build | error | frames |
+| `long-frame` | A frame over 50 ms during hover, a click transition or scroll, from an application script or from style, layout and paint with no script; a warning on a development build | error | frames |
 | `ease-in` | The response starts slow: declared curve or measured trajectory | error | css |
 | `duration` | Declared duration outside the band for the gesture (hover 80-300, press 50-200, focus up to 250 ms) | warning | css |
 | `linear` | A transform or opacity transition declared linear: mechanical | warning | css |
@@ -70,7 +70,8 @@ Audit a **production build** (`next start`, `vite preview`, a deployed preview),
 builds add HMR, overlays and unminified work: the audit detects them, says so, and downgrades
 `long-frame` to a warning, but only a production build gives frame timings that mean something.
 
-Git Bash or any POSIX shell:
+The same command works in Git Bash, other POSIX shells and PowerShell (`${CLAUDE_SKILL_DIR}` is
+substituted before the shell runs it; the single-quoted selectors are literal in both):
 
 ```bash
 node "${CLAUDE_SKILL_DIR}/scripts/motion-audit.mjs" http://localhost:3000/orders
@@ -78,24 +79,34 @@ node "${CLAUDE_SKILL_DIR}/scripts/motion-audit.mjs" http://localhost:3000/orders
 node "${CLAUDE_SKILL_DIR}/scripts/motion-audit.mjs" http://localhost:3000/orders --only 'nav a' --only '.toolbar button' --frames '.btn-primary'
 ```
 
-PowerShell:
-
-```powershell
-node "${CLAUDE_SKILL_DIR}/scripts/motion-audit.mjs" http://localhost:3000/orders --cpu 4
-```
-
-Exit 0 clean, 1 findings, **2 could not run or audited nothing** - a 2 is never a pass. The summary says
-`audited N of M controls` and lists every skip with its reason (`NOT RUN hidden`, `covered`,
-`beyond --max 40`...); when N is lower than M, say which controls were not audited. `--min-coverage 0.8`
-turns a low ratio into exit 2.
+Exit 0 clean, 1 findings, **2 could not run, audited nothing or audited incompletely** - a 2 is never a
+pass. The summary says `audited N of M controls` and lists every skip with its reason (`NOT RUN hidden`,
+`covered`, `beyond --max 40`...); when N is lower than M, say which controls were not audited.
+`--min-coverage 0.8` turns a low ratio into exit 2; controls beyond `--max` count as not audited, so
+raise it too (`--max 200 --min-coverage 0.8`). Controls that appear after the audit counted them (a late
+fetch) make the run exit 2 with `INCOMPLETE`: re-run with `--wait-for`. A URL that redirects, from the
+server or from script (a session check, a router), exits 2 instead of auditing another page; a login
+page is never audited (use `--storage-state`), another page only with `--allow-redirect`.
 
 **Observe-only by default.** The audit hovers, forces `:active` and `:focus-visible`, scrolls and reads.
 It does not click, so it cannot toggle a Follow button, open a menu that opens on `pointerdown`, submit a
-form or switch a tab that switches on `mousedown`. `--interact` is opt-in and adds a real press and the
-toggle probes (`not-interruptible`, `reduced-motion-residue`); a denylist skips submit and form buttons,
-delete/remove/logout/pay wording, `[draggable]`, sliders and separators, the page is reloaded between
-probes, the run stops if a gesture navigates, and every toggle is clicked an even number of times. Use it
-only against a disposable environment. `--click <selector>` is an explicit click on the control you name.
+form, switch a tab that switches on `mousedown`, or run focus and keyboard handlers. It does move the
+real pointer and scroll the real page, so handlers bound to hover (`mouseenter`, `mouseover`,
+`pointerenter` that send a beacon or write storage), scroll-bound `IntersectionObserver` callbacks and
+`beforeunload` beacons run: audit a throwaway or staging environment, not one where an impression or a
+hover event is billed or irreversible. `--interact` is opt-in and adds a real press and the
+toggle probes (`not-interruptible`, `reduced-motion-residue`); a denylist skips submit and reset
+controls (inside their form or tied to it with `form=`), buttons with no accessible name, links to
+logout/delete routes, destructive or payment wording in English, Spanish, Portuguese, French, German and
+Italian (including `aria-labelledby` and image alt text), `[draggable]`, sliders and separators; the
+page is reloaded between probes, the run stops if a gesture navigates, every toggle is clicked as the
+same node an even number of times, and the denylist is checked again before each click. Use it only
+against a disposable environment.
+
+`--click <selector>` is an explicit click on the control you name, and it clicks more than once: twice
+(a pass without the tracer for long frames, one with it for trajectories), four times with
+`--interrupt`, and each flaky aspect found is re-measured twice more (up to six, or twelve, clicks). Run
+it only against a throwaway environment: a "Save" or "Delete" target is saved or deleted several times.
 
 - `--cpu 4` throttles like a mid-range phone. Jank that only shows throttled is still jank.
 - `--click <sel>` records everything that moves for 1.5 s after a real click, including overlays mounted
@@ -171,7 +182,7 @@ test('orders: motion', async ({ page }) => {
 });
 ```
 
-Or the CLI: `npx motion-audit http://localhost:3000/orders --min-coverage 0.8 --baseline motion-baseline.json`.
+Or the CLI: `npx motion-audit http://localhost:3000/orders --max 200 --min-coverage 0.8 --baseline motion-baseline.json`.
 
 ## Limits
 

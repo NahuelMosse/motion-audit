@@ -56,7 +56,7 @@ test('the JSON report carries the schema version, coverage, loafSupported and st
   const r = await run('shadcn.html');
   assert.equal(r.report.schemaVersion, 1);
   assert.equal(typeof r.report.loafSupported, 'boolean');
-  assert.deepEqual(Object.keys(r.report.coverage).sort(), ['audited', 'candidates', 'errored', 'max', 'skipped', 'toggles']);
+  assert.deepEqual(Object.keys(r.report.coverage).sort(), ['audited', 'candidates', 'errored', 'late', 'max', 'skipped', 'toggles']);
   assert.ok(r.report.findings.every((f) => new RegExp(`^${f.kind}:[0-9a-f]{10}$`).test(f.id)));
   const again = await run('shadcn.html');
   assert.deepEqual(again.report.findings.map((f) => f.id).sort(), r.report.findings.map((f) => f.id).sort());
@@ -124,12 +124,21 @@ test('--baseline hides findings an earlier report had, and compare lists differe
   const again = await run('shadcn.html', '--baseline', join(out, 'report.json'));
   assert.equal(again.report.findings.length, 0);
   assert.equal(again.report.baselined.length, first.report.findings.length);
+});
+
+test('compare lists what a real change fixed: the page with listed transition properties has no transition-all', async () => {
   const refPath = join(scratch, 'ref.json');
   const minePath = join(scratch, 'mine.json');
-  writeFileSync(refPath, JSON.stringify(first.report));
-  writeFileSync(minePath, JSON.stringify(again.report));
+  const ref = await run('shadcn.html');
+  const mine = await run('shadcn-fixed.html');
+  assert.ok(ref.report.findings.some((f) => f.kind === 'transition-all'));
+  assert.ok(!mine.report.findings.some((f) => f.kind === 'transition-all'));
+  writeFileSync(refPath, JSON.stringify(ref.report));
+  writeFileSync(minePath, JSON.stringify(mine.report));
   const cmp = await runCli(['compare', refPath, minePath]);
   assert.equal(cmp.code, 0);
-  assert.match(cmp.stdout, /gone from mine: /);
+  assert.match(cmp.stdout, /gone from mine: transition-all: /);
   assert.match(cmp.stdout, /\d+ of \d+ differ/);
+  const same = await runCli(['compare', refPath, refPath]);
+  assert.doesNotMatch(same.stdout, /gone from mine|new in mine/);
 });

@@ -57,9 +57,8 @@ test('the default mode causes no request, no storage write and no state change o
     assert.equal(report.mode, 'observe-only');
     assert.deepEqual(apiCalls(), []);
     assert.equal(await page.evaluate(() => localStorage.length), before[0]);
-    assert.equal(await page.evaluate(() => document.getElementById('follow').getAttribute('aria-pressed')), 'false');
-    assert.equal(await page.evaluate(() => document.getElementById('menu').getAttribute('aria-expanded')), 'false');
-    assert.equal(await page.evaluate(() => document.getElementById('tab-b').getAttribute('aria-selected')), 'false');
+    // The fixture reports every change of aria-pressed, aria-expanded and aria-selected while it runs.
+    assert.deepEqual(srv.stats.requests.filter((r) => r.includes('/api/state/')), []);
   });
 });
 
@@ -73,6 +72,8 @@ test('--interact never touches the delete button, the drag handle or the slider,
     const follows = calls.filter((c) => c.endsWith('/api/follow')).length;
     assert.ok(follows > 0, 'the aria-pressed toggle was probed');
     assert.equal(follows % 2, 0, `${follows} clicks on a persisted toggle`);
+    const states = calls.filter((c) => c.includes('/api/state/follow/aria-pressed'));
+    assert.ok(states.length >= follows, 'the state changes of the toggle were recorded');
     assert.notEqual(await page.evaluate(() => localStorage.getItem('follow')), 'true');
     assert.ok(report.coverage.toggles.probed >= 1);
   });

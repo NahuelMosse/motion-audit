@@ -8,7 +8,11 @@ animation frame instead of trusting what the CSS declares.
 
 It is **observe-only by default**: it hovers, forces `:active` and `:focus-visible` over the DevTools
 protocol, scrolls and reads. It never clicks unless you pass `--interact` (or name a control with
-`--click`), so it cannot toggle a Follow button or submit a form.
+`--click`), so it cannot toggle a Follow button or submit a form, and no focus, key or press handler
+runs. The pointer and the scroll are real, though: handlers bound to hover (`mouseenter`, `mouseover`,
+`pointerenter` that send a beacon or write storage), scroll-bound `IntersectionObserver` callbacks and
+`beforeunload` beacons run. Audit a throwaway or staging environment, never one where those events
+are billed or irreversible.
 
 ## Install as a Claude Code plugin
 
@@ -25,7 +29,7 @@ claude plugin marketplace update motion-audit
 claude plugin update motion-audit@motion-audit
 ```
 
-The skill needs Node 22+ and Playwright 1.43+ with Chromium in the project you audit
+The skill needs Node 22.12+ and Playwright 1.43+ with Chromium in the project you audit
 (`npm i -D playwright && npx playwright install chromium`). Set `PLAYWRIGHT_ROOT` to a project that has
 it when the audited project does not.
 
@@ -45,9 +49,10 @@ Exit `0` clean, `1` findings, `2` could not run or audited nothing. Audit a prod
 |---|---|
 | `--only <sel>` | audit only matching controls (repeatable) |
 | `--max <n>` | audit at most n controls, default 40; the summary says `audited N of M` |
-| `--min-coverage <0-1>` | exit 2 when audited / candidates is lower |
-| `--interact` | real press and toggle probes; a denylist skips submit, delete, drag and slider controls |
-| `--click <sel>` `--interrupt` | record a real click (and a second one half-way) |
+| `--min-coverage <0-1>` | exit 2 when audited / candidates is lower; controls beyond `--max` count as not audited, so raise `--max` too |
+| `--interact` | real press and toggle probes; a denylist skips submit and reset controls, unnamed buttons, logout and delete links, destructive wording in six languages, drag and slider controls |
+| `--click <sel>` `--interrupt` | record a real click (and a second one half-way); clicks the target twice, four times with `--interrupt`, more when a finding is re-measured: throwaway environments only |
+| `--allow-redirect` | audit the page the URL redirects to; without it any redirect, from the server or from script, exits 2, and a login page always does |
 | `--cpu <rate>` | CPU throttle, 4 is a mid-range phone |
 | `--frames <sel>` | contact sheet of hover and press with real timestamps |
 | `--entrances` | also report sections without an entrance (info) |
@@ -103,10 +108,10 @@ test('orders: motion', async ({ page }) => {
 
 `audit(pageOrUrl, options)` takes a Playwright `page` (its `baseURL` and `storageState` apply) or a URL
 (options: `only`, `max`, `cpu`, `click`, `interrupt`, `interact`, `frames`, `entrances`, `config`,
-`baseline`, `storageState`, `waitFor`, `out`). Or from the shell, failing on new findings only:
+`baseline`, `storageState`, `waitFor`, `allowRedirect`, `out`). Or from the shell, failing on new findings only:
 
 ```bash
-npx motion-audit "$APP_URL/orders" --min-coverage 0.8 --baseline motion-baseline.json
+npx motion-audit "$APP_URL/orders" --max 200 --min-coverage 0.8 --baseline motion-baseline.json
 ```
 
 ## Develop
