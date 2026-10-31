@@ -13,7 +13,7 @@
     ".": "./skills/motion-audit/scripts/lib/index.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "peerDependencies": {
     "playwright": ">=1.43"
@@ -23,6 +23,6 @@
     "fixtures": "node test/helpers/fixture-runs.mjs 3"
   },
   "devDependencies": {
-    "playwright": "1.43"
+    "playwright": "^1.43"
   }
 }
