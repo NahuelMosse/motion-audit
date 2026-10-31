@@ -114,3 +114,41 @@ test('an unconfirmed jump: dropped when a decidable re-measure ruled it out in a
   assert.equal(sightedDense(moved(move(70, { jumps: [{ atMs: 1, size: 1 }] }))), false);
   assert.equal(sightedDense(moved(move(20))), false);
 });
+
+// Every place a sighting of an interrupt jump can be discarded (the re-measures disagree, the frames cannot follow a restart)
+// ends in a row with the finding's fingerprint, unless a decidable re-measure ruled it out.
+test('interrupt sightings: undecided rows keep the fingerprint of the finding; a decided negative drops it', async () => {
+  const { markCadence } = await import('../skills/motion-audit/scripts/lib/continuity.mjs');
+  const { judgeElement } = await import('../skills/motion-audit/scripts/lib/judge.mjs');
+  const { fingerprint } = await import('../skills/motion-audit/scripts/lib/config.mjs');
+  // markCadence: 60 Hz is dense, a stall is not
+  const dense = { marks: [200], elems: [txElement(frames(30), frames(30).map(() => 0))], anims: [] };
+  assert.ok(markCadence(dense, 200).max <= DENSE_MAX_MS);
+  const stalled = { marks: [200], elems: [txElement([0, 50, 100, 250, 400, 450], [0, 0, 0, 0, 0, 0])], anims: [] };
+  assert.ok(markCadence(stalled, 250).max > DENSE_MAX_MS);
+  // an element whose hover-interrupt sighting was not confirmed and could not be ruled out
+  const el = { label: 'button "Card"', kind: 'button', selected: false, transition: { properties: [], durations: [], easings: [] }, moments: {}, long: [], undecided: [{ check: 'interrupt-jump', key: 'hover', detail: 'hover left mid-way: a jump was seen in one recording and not in the re-measures', cadence: { median: 17, max: 90 } }] };
+  const rows = judgeElement(el);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].kind, 'inconclusive');
+  const finding = { kind: 'interrupt-jump', element: 'button "Card"', key: 'hover' };
+  assert.equal(fingerprint(rows[0]).split(':')[1], fingerprint(finding).split(':')[1]);
+});
+
+test('a hover interrupt or element jump dropped by the majority vote becomes an undecided row unless a decidable re-measure ruled it out', async () => {
+  const { undecidedOf } = await import('../skills/motion-audit/scripts/lib/audit.mjs');
+  const rerun = (decidableRerun) => ({ interrupt: [], interruptUnsure: decidableRerun ? null : { median: 40, max: 120 }, moments: { hover: { motion: [{ label: 'div', moves: [{ prop: 'translateX', jumps: [], unresolved: decidableRerun ? 0 : 1, cadence: { median: 17, max: decidableRerun ? 17 : 120 } }] }] } } });
+  const interrupt = (dense) => ({ unconfirmed: ['interrupt'], interruptDense: dense, interruptCadence: { median: 17, max: 60 } });
+  const kinds = (el, later) => undecidedOf(el, later).map((u) => `${u.check} ${u.key}`);
+  // clear sighting in dense frames, not reproduced by decidable re-measures: a flake, undecided
+  assert.deepEqual(kinds(interrupt(true), [rerun(true), rerun(true)]), ['interrupt-jump hover']);
+  // sparse sighting, one decidable re-measure without it: decided negative, no row
+  assert.deepEqual(kinds(interrupt(false), [rerun(false), rerun(true)]), []);
+  // sparse sighting, no re-measure could judge: undecided
+  assert.deepEqual(kinds(interrupt(false), [rerun(false), rerun(false)]), ['interrupt-jump hover']);
+  // jumps of a gesture's motions follow the same rule, one row per sighting
+  const jumped = (max) => ({ unconfirmed: ['jump'], moments: { hover: { motion: [{ label: 'div', moves: [{ prop: 'left', jumps: [{ atMs: 1, size: 9 }], cadence: { median: 17, max } }] }] } } });
+  assert.deepEqual(kinds(jumped(17), [rerun(true), rerun(true)]), ['jump hover div left']);
+  assert.deepEqual(kinds(jumped(90), [rerun(false), rerun(true)]), []);
+  assert.deepEqual(kinds(jumped(90), [rerun(false), rerun(false)]), ['jump hover div left']);
+});

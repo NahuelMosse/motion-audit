@@ -7,7 +7,7 @@ import {
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
 import { auxPage, createPseudoStates, diff, load, longFramesBetween, longWindows, shot, snapshot, toMs, traced, unattributedLimit } from './browser.mjs';
-import { interruptionJumps, restartUnfollowed } from './continuity.mjs';
+import { interruptionJumps, markCadence, restartUnfollowed } from './continuity.mjs';
 import { denyReason, describeElement, elementInfo, hitPoint, infiniteAnimations, invisibleContent, proxyOf, readTransition, scrollPass, waitSettled } from './page-scripts.mjs';
 import { reducedMoves, reducedResidue } from './reduced.mjs';
 import { analyzeRecording, animatedMove, median } from './series.mjs';
@@ -162,6 +162,8 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         const frames = longWindows(await page.evaluate(() => window.__mt.loaf), interruptFrom, unattributedLimit(page));
         el.interrupt = rec?.marks.length ? interruptionJumps(rec, rec.marks[0], { durationMs: hoverMs, small: true, longFrames: frames }) : [];
         el.interruptUnsure = rec?.marks.length && !el.interrupt.length ? restartUnfollowed(rec, rec.marks[0]) : null;
+        el.interruptCadence = rec?.marks.length ? markCadence(rec, rec.marks[0]) : null;
+        el.interruptDense = Boolean(el.interrupt.length) && (markCadence(rec, rec.marks[0])?.max ?? Infinity) <= SERIES_DENSE_MAX_DT_MS;
         if (!el.interruptUnsure) break;
       }
     }
@@ -237,12 +239,25 @@ export const probeToggle = async (ctx, index) => {
   };
   const moved = (rec) => analyzeRecording(rec).flatMap((e) => e.moves.filter((m) => m.firstT >= rec.marks[0] - 2 * FRAME_MS));
   const jumps = [];
+  // What the reversals could not decide, and whether a jump seen was a clear step in frame-by-frame sampling.
+  let sighted = false;
+  let dense = true;
+  let unsure = null;
+  let cadence = null;
   let dur = 0;
   try {
     const first = await run(['click', 'settle']);
     dur = Math.max(0, ...moved(first).map((m) => m.durationMs));
     if (dur >= TOGGLE_MIN_MOTION_MS) {
-      const check = (rec, direction) => { if (rec.marks.length > 1) for (const j of interruptionJumps(rec, rec.marks.at(-1), { durationMs: dur })) jumps.push({ ...j, direction }); };
+      const check = (rec, direction) => {
+        if (rec.marks.length < 2) return;
+        const mark = rec.marks.at(-1);
+        const found = interruptionJumps(rec, mark, { durationMs: dur });
+        const around = markCadence(rec, mark);
+        for (const j of found) jumps.push({ ...j, direction });
+        if (found.length) { sighted = true; if (!(around && around.max <= SERIES_DENSE_MAX_DT_MS)) dense = false; } else unsure ??= restartUnfollowed(rec, mark);
+        cadence ??= around;
+      };
       await run(['click', 'settle']); // back to the starting state
       for (const share of TOGGLE_SHARES) {
         const half = Math.max(50, Math.round(dur * share));
@@ -257,7 +272,7 @@ export const probeToggle = async (ctx, index) => {
     if (clicks % 2) await click().catch((e) => ctx.notes.push(`could not restore toggle ${label}: ${e.message.split('\n')[0]}`));
   }
   jumps.sort((x, y) => y.delta - x.delta);
-  return { label, dur, jumps };
+  return { label, dur, jumps, unsure, cadence, dense: sighted && dense };
 };
 
 // ---------- --click <selector> ----------
@@ -348,6 +363,7 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       moved = analyze(traced2);
     }
     const rec = traced2.rec;
+    const interruptJumps = interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from, unattributedLimit(page)) }) : [];
     return {
       moved,
       long: longFramesBetween(quiet.loaf, quiet.from, Infinity, unattributedLimit(page)),
@@ -358,7 +374,10 @@ export const clickMeasurer = (ctx, selector, interrupt) => {
       sightedDense: sightedDense(moved),
       jumps: moved.flatMap((e) => e.moves.flatMap((m) => m.jumps.map((j) => ({ label: e.label, prop: m.prop, ...j })))),
       layout: moved.flatMap((e) => e.moves.filter((m) => /^layout/.test(m.prop) && animatedMove(m)).map((m) => ({ label: e.label, prop: m.prop, durationMs: m.durationMs }))),
-      interrupt: interrupt && rec.marks.length > 1 ? interruptionJumps(rec, rec.marks[1], { durationMs: CLICK_INTERRUPT_MS * 2, small: true, longFrames: longWindows(traced2.loaf, traced2.from, unattributedLimit(page)) }) : [],
+      interrupt: interruptJumps,
+      // The second click could not be judged (a restart the frames cannot follow), and how clear a sighting was.
+      interruptUnsure: interrupt && rec.marks.length > 1 && !interruptJumps.length ? restartUnfollowed(rec, rec.marks[1]) : null,
+      interruptDense: interruptJumps.length > 0 && (markCadence(rec, rec.marks[1])?.max ?? Infinity) <= SERIES_DENSE_MAX_DT_MS,
       mounted: rec.mounted,
     };
   };
