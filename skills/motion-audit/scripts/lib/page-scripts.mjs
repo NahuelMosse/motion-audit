@@ -89,11 +89,18 @@ export const cssPath = (n) => {
 };
 
 // Why --interact must not press or toggle this element, or null.
-export const denyReason = (n, { selector, text }) => {
-  if (n.matches(selector)) return 'submit, form, drag or slider control';
-  const label = (n.getAttribute('aria-label') || n.textContent || n.getAttribute('title') || '').trim().slice(0, 80);
-  if (new RegExp(text, 'i').test(label)) return `destructive or irreversible wording ("${label.slice(0, 30)}")`;
-  if (n.closest('form') && n.matches('button:not([type=button])')) return 'inside a form';
+export const denyReason = (n, { selector, text, flags, href, named }) => {
+  if (n.matches(selector)) return 'submit, reset, drag or slider control';
+  // A submit button of a form, wherever it sits (inside it or tied to it with form=): a default <button> submits.
+  if (n.form && ['submit', 'image', 'reset'].includes(n.type)) return 'submits or resets a form';
+  const byIds = (n.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.textContent ?? '');
+  const inner = [...n.querySelectorAll('img[alt], [aria-label], svg title')].map((x) => x.getAttribute('alt') ?? x.getAttribute('aria-label') ?? x.textContent);
+  const names = [...byIds, n.getAttribute('aria-label'), n.textContent, n.getAttribute('title'), n.getAttribute('value'), n.getAttribute('alt'), ...inner].map((x) => (x ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const wording = names.find((x) => new RegExp(text, flags).test(x));
+  if (wording) return `destructive or irreversible wording ("${wording.slice(0, 30)}")`;
+  const target = n.getAttribute('href') ?? '';
+  if (target && new RegExp(href, 'i').test(target)) return `link to a destructive route (${target.slice(0, 40)})`;
+  if (!names.length && n.matches(named)) return 'no accessible name: it may be a destructive icon button';
   return null;
 };
 

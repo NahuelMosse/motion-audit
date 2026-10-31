@@ -1,7 +1,7 @@
 // The gestures: what one control, one toggle, one click target and the reduced-motion pass do.
 import { join } from 'node:path';
 import {
-  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CONTACT_SHEET_STEP_MS, DENY_SELECTOR, DENY_TEXT, FOCUS_DWELL_MS, FRAME_MS,
+  CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CONTACT_SHEET_STEP_MS, DENY_HREF, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FOCUS_DWELL_MS, FRAME_MS,
   HIT_TEST_POINTS, HOVER_DWELL_MS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_TAIL_MS, PRESS_DWELL_MS, SETTLE_MAX_MS,
   REDUCED_LOOP_SPINNER_PX, REST_MARGIN_MS, REST_MAX_MS, REST_MIN_MS, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SETTLE_MARGIN_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
 } from './constants.mjs';
@@ -11,7 +11,7 @@ import { denyReason, elementInfo, hitPoint, infiniteAnimations, invisibleContent
 import { reducedMoves, reducedResidue } from './reduced.mjs';
 import { analyzeRecording } from './series.mjs';
 
-const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source };
+const DENY = { selector: DENY_SELECTOR, text: DENY_TEXT.source, flags: DENY_TEXT.flags, href: DENY_HREF.source, named: NAMED_CONTROL };
 const asElement = (jsHandle) => jsHandle.asElement();
 const wait = (page, ms) => page.waitForTimeout(ms);
 
@@ -31,6 +31,20 @@ const settle = async (page, root, min) => {
 };
 
 export const denied = (handle) => handle.evaluate(denyReason, DENY);
+
+// A real press is released away from the control, which still makes the browser dispatch a click
+// on the common ancestor (the body) and start a native drag on links. Both are cancelled before
+// any page handler below the window sees them.
+const guardPress = (page, on) => page.evaluate((enable) => {
+  const events = ['click', 'auxclick', 'dblclick', 'dragstart'];
+  if (enable) {
+    window.__maGuard = (e) => { e.stopImmediatePropagation(); e.preventDefault(); };
+    for (const t of events) window.addEventListener(t, window.__maGuard, true);
+  } else if (window.__maGuard) {
+    for (const t of events) window.removeEventListener(t, window.__maGuard, true);
+    delete window.__maGuard;
+  }
+}, on);
 
 // A point where the control itself receives the pointer, scrolling it to the centre if the first
 // try is covered (sticky header, cookie banner); null when something stays on top.
@@ -80,11 +94,13 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
     if (info.kind !== 'input') {
       let press;
       if (real) {
+        await guardPress(page, true);
         press = await traced(page, proxy, async () => { await page.mouse.down(); await settle(page, proxy, PRESS_DWELL_MS); });
         const pressed = await snapshot(proxy, VISIBLE_PROPS);
         const pressedPx = await shot(page, box);
         await page.mouse.move(1, 1);
         await page.mouse.up();
+        await guardPress(page, false);
         await moment('press', hovered, hoverPx, pressed, pressedPx, press);
       } else {
         let ids;
@@ -137,7 +153,14 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
 
 // ---------- toggles (only with --interact) ----------
 
-const clickToggle = (page, index) => page.evaluate(([sel, i]) => { document.querySelectorAll(sel)[i].click(); }, [TOGGLE, index]);
+// Clicks the very node that was chosen (never "the nth toggle": a list that reorders would hand the
+// second click to another item), after checking again that it is still attached and still safe.
+const clickToggle = async (handle) => {
+  if (!(await handle.evaluate((n) => n.isConnected))) throw new Error('the control left the page');
+  const refused = await denied(handle);
+  if (refused) throw new Error(`no longer safe to click (${refused})`);
+  await handle.evaluate((n) => n.click());
+};
 
 // Indices of the toggles that may be clicked: reachable, enabled and not on the denylist.
 export const eligibleToggles = async (page) => {
@@ -159,12 +182,14 @@ export const eligibleToggles = async (page) => {
 export const probeToggle = async (ctx, index) => {
   const { page, url } = ctx;
   await load(page, url, ctx.loadOptions);
-  const label = await page.evaluate(([sel, i]) => { const n = document.querySelectorAll(sel)[i]; return n ? n.tagName.toLowerCase() + (n.id ? `#${n.id}` : '') + ` "${(n.getAttribute('aria-label') || n.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 28)}"` : null; }, [TOGGLE, index]);
-  if (!label) return { label: null };
+  const handle = (await page.$$(TOGGLE))[index];
+  if (!handle) return { label: null };
+  const label = await handle.evaluate((n) => n.tagName.toLowerCase() + (n.id ? `#${n.id}` : '') + ` "${(n.getAttribute('aria-label') || n.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 28)}"`);
+  if (await denied(handle)) return { label: null };
   let clicks = 0;
-  const click = async () => { clicks++; await clickToggle(page, index); };
+  const click = async () => { await clickToggle(handle); clicks++; };
   const run = async (steps) => {
-    const hint = await page.evaluateHandle(([sel, i]) => { const n = document.querySelectorAll(sel)[i]; return n ? document.getElementById(n.getAttribute('aria-controls') || '') : null; }, [TOGGLE, index]);
+    const hint = await handle.evaluateHandle((n) => document.getElementById(n.getAttribute('aria-controls') || ''));
     await page.evaluate(([h]) => window.__mt.begin('p', null, true, h), [hint]);
     for (const s of steps) { if (s === 'click') await click(); else await wait(page, s); }
     return page.evaluate(() => window.__mt.end('p'));
@@ -186,6 +211,8 @@ export const probeToggle = async (ctx, index) => {
         await run(['click', settle]); // closed again
       }
     } else await run(['click', TOGGLE_SETTLE_MARGIN_MS]); // no motion: still return to the starting state
+  } catch (e) {
+    ctx.notes.push(`toggle ${label} stopped: ${e.message.split('\n')[0]}`);
   } finally {
     if (clicks % 2) await click().catch((e) => ctx.notes.push(`could not restore toggle ${label}: ${e.message.split('\n')[0]}`));
   }
@@ -260,10 +287,10 @@ export const reducedPass = async (ctx, targets) => {
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await wait(page, 150);
       let ids = null;
-      if (real) await page.mouse.down(); else ids = await pseudo.force(h, ['hover', 'active']);
+      if (real) { await guardPress(page, true); await page.mouse.down(); } else ids = await pseudo.force(h, ['hover', 'active']);
       await wait(page, PRESS_DWELL_MS);
       const pressed = await snapshot(h, T);
-      if (real) { await page.mouse.move(1, 1); await page.mouse.up(); } else { await pseudo.clear(ids); await page.mouse.move(1, 1); }
+      if (real) { await page.mouse.move(1, 1); await page.mouse.up(); await guardPress(page, false); } else { await pseudo.clear(ids); await page.mouse.move(1, 1); }
       await wait(page, 300);
       const released = await snapshot(h, T);
       per.set(path, { moves: reducedMoves(rest, pressed), residue: reducedResidue(rest, released) });
