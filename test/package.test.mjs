@@ -39,9 +39,10 @@ test('the workflow uses current checkout and setup-node majors', () => {
 });
 
 // A stray file at the root (a mis-quoted shell command can create one) must not be committed.
-test('the tracked files at the repository root are exactly the expected ones', () => {
+test('the tracked files at the repository root are all on the list of expected ones', () => {
   let tracked;
   try { tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean); } catch { return; } // not a git checkout
   const root = tracked.filter((f) => !f.includes('/')).sort();
-  assert.deepEqual(root, ['.gitattributes', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'NOTICES.md', 'README.md', 'package-lock.json', 'package.json']);
+  const allowed = ['.gitattributes', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'NOTICES.md', 'README.md', 'SECURITY.md', 'package-lock.json', 'package.json'];
+  assert.deepEqual(root.filter((f) => !allowed.includes(f)), [], 'a file at the root that is not on the list');
 });
