@@ -13,7 +13,7 @@ import { finalize, loadConfig, validateConfig } from './config.mjs';
 import { inconsistencies, judgeElement } from './judge.mjs';
 import { devSignals, cssPath, describeElement, hasReducedMotionRule, invisibleContent, reachability, scrollPass, ungatedHoverMotion } from './page-scripts.mjs';
 import { tracer } from './page-tracer.mjs';
-import { clickRows, confirmToggle, toggleRow, undecidedOf } from './undecided.mjs';
+import { clickRerun, clickRows, confirmToggle, toggleRow, undecidedOf } from './undecided.mjs';
 import { loadPlaywright } from './playwright.mjs';
 import { auditElement, clickMeasurer, contactSheet, eligibleToggles, probeToggle, reducedPass } from './probes.mjs';
 
@@ -235,19 +235,17 @@ export const audit = async (pageOrUrl, o = {}) => {
     if (o.click) {
       const measure = clickMeasurer(ctx, o.click, o.interrupt);
       let r = await measure();
-      if (r.missing) add('click-target', o.click, `${o.click} ${r.missing}`, 'target');
+      if (r.missing) { add('click-target', o.click, `${o.click} ${r.missing}`, 'target'); await measure.restore(); }
       else {
         const label = `click ${o.click}`;
         const holder = { long: r.long, jumps: r.jumps, interrupt: r.interrupt };
         const reruns = [];
-        await confirm(holder, { long: (x) => x.long.length > 0, jump: (x) => x.jumps.length > 0, interrupt: (x) => x.interrupt.length > 0 }, async () => {
-          const again = await measure(0);
-          reruns.push(again.missing ? { jumps: [], interrupt: [] } : again);
-          return again.missing ? null : again;
-        });
+        const later = await confirm(holder, { long: (x) => x.long.length > 0, jump: (x) => x.jumps.length > 0, interrupt: (x) => x.interrupt.length > 0 }, clickRerun(measure, reruns));
         const undecidedRows = clickRows(label, r, holder.unconfirmed ?? [], reruns);
         for (const name of holder.unconfirmed ?? []) r = { ...r, [name === 'jump' ? 'jumps' : name]: [] };
-        click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, cadence: r.cadence, long: r.long, interrupt: r.interrupt };
+        // Back to the state the target started in when the presses ended odd (a retry is one press).
+        const restored = await measure.restore();
+        click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, cadence: r.cadence, long: r.long, interrupt: r.interrupt, presses: measure.presses(), remeasures: later.length, restored };
         raw.push(...undecidedRows);
         if (r.jumps.length) add('jump', label, `${r.jumps.slice(0, 4).map((j) => `${j.label} ${j.prop} jumps ${j.size} at ${j.atMs} ms`).join('; ')}${r.jumps.length > 4 ? ` (+${r.jumps.length - 4} more)` : ''}`, 'click');
         for (const l of r.layout) add('layout-animated', label, `${l.label} animates its ${l.prop === 'layoutWidth' ? 'width' : 'height'} over ${l.durationMs} ms`, `${l.label} ${l.prop}`);

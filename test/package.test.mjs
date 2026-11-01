@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT } from './helpers/cli.mjs';
@@ -35,4 +36,12 @@ test('the workflow uses current checkout and setup-node majors', () => {
   assert.ok(!/actions\/(checkout|setup-node)@v[1-4]\b/.test(ci));
   assert.match(ci, /actions\/checkout@v5/);
   assert.match(ci, /actions\/setup-node@v5/);
+});
+
+// A stray file at the root (a mis-quoted shell command can create one) must not be committed.
+test('the tracked files at the repository root are exactly the expected ones', () => {
+  let tracked;
+  try { tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean); } catch { return; } // not a git checkout
+  const root = tracked.filter((f) => !f.includes('/')).sort();
+  assert.deepEqual(root, ['.gitattributes', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'NOTICES.md', 'README.md', 'package-lock.json', 'package.json']);
 });

@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CLICK_RESOLVE_RETRIES, CONFIRM_RUNS } from '../skills/motion-audit/scripts/lib/constants.mjs';
 import { clickMeasurer } from '../skills/motion-audit/scripts/lib/probes.mjs';
+import { clickRerun } from '../skills/motion-audit/scripts/lib/undecided.mjs';
 import { EASINGS, FRAME, txElement } from './helpers/curves.mjs';
 
 const ease = EASINGS['ease-in-out'];
@@ -15,12 +16,16 @@ const cadence = { dense: (n) => Array.from({ length: n }, (_, i) => (i - 3) * FR
 // A page whose press yields `curve` sampled at `frames`; counts the presses its attempts make.
 const page = (curve, frames, interrupt) => {
   const state = { presses: 0, attempts: 0 };
-  const makeAttempt = () => async (trace) => {
+  const makeAttempt = () => {
+    const attempt = async (trace) => {
     state.attempts++;
     state.presses += interrupt ? 2 : 1;
     const t = frames(40);
     const rec = { marks: interrupt ? [t[3], t[8]] : [t[3]], anims: [], mounted: 0, elems: [txElement(t, t.map(curve), { root: false, label: 'div.box' })] };
     return { from: t[0], loaf: [], rec: trace ? rec : null };
+    };
+    attempt.press = async () => { state.presses += 1; state.restores = (state.restores ?? 0) + 1; return true; };
+    return attempt;
   };
   return { state, measure: clickMeasurer({ page: {}, url: 'x', loadOptions: {} }, '#go', interrupt, makeAttempt) };
 };
@@ -54,3 +59,35 @@ for (const interrupt of [false, true]) {
     assert.equal(worst, interrupt ? 16 : 8, 'the documented maximum');
   });
 }
+
+test('an odd count without --interrupt is restored by one more press; with --interrupt it is already even; the re-measure never retries', async () => {
+  // quiet + traced + one retry: three presses, so the target is pressed once more and ends in its initial state
+  const odd = page(series.bump, cadence.sparse, false);
+  await odd.measure(1);
+  assert.equal(odd.state.presses, 3);
+  assert.equal(await odd.measure.restore(), true);
+  assert.equal(odd.state.presses, 4);
+  assert.equal(odd.measure.presses(), 4);
+  assert.equal(await odd.measure.restore(), false, 'nothing left to restore');
+  // an even count is left alone, and so is any count with --interrupt
+  const even = page(series.static, cadence.dense, false);
+  await even.measure();
+  assert.equal(await even.measure.restore(), false);
+  const twice = page(series.bump, cadence.sparse, true);
+  await twice.measure(1);
+  assert.equal(twice.state.presses % 2, 0);
+  assert.equal(await twice.measure.restore(), false);
+  // the worst case with the restore still holds the cap: seven presses become eight, never nine
+  const worst = page(series.bump, cadence.sparse, false);
+  await worst.measure();
+  for (const rerun of [1, 2]) await clickRerun(worst.measure, [])();
+  assert.ok(worst.state.presses <= 8);
+  await worst.measure.restore();
+  assert.ok(worst.state.presses <= 8 && worst.state.presses % 2 === 0, `${worst.state.presses}`);
+  // the confirmation re-measure presses twice (four with --interrupt) however unresolved the motion: a mutation of measure(0) into measure() fails here
+  for (const interrupt of [false, true]) {
+    const p = page(series.bump, cadence.sparse, interrupt);
+    await clickRerun(p.measure, [])();
+    assert.equal(p.state.presses, interrupt ? 4 : 2);
+  }
+});

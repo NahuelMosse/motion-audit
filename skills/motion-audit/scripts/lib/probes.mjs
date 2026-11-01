@@ -305,10 +305,11 @@ export const frameCadence = (rec, from = -Infinity) => {
 export const recordingCadence = (rec) => frameCadence(rec, (rec.marks[0] ?? 0) - 2 * FRAME_MS);
 
 // One press of the target and the recording of what follows it: `trace` records the trajectories, otherwise only the long frames.
-// Each call presses the target once (twice with `interrupt`): the press budget of --click is counted in calls.
+// Each call presses the target once (twice with `interrupt`): the press budget of --click is counted in calls. `.press()` is a bare
+// press, used to restore the state a target keeps (server side, storage) when the count of presses ended odd.
 const pageAttempt = (ctx, selector, interrupt) => {
   const { page, url } = ctx;
-  return async (trace) => {
+  const attempt = async (trace) => {
     await load(page, url, ctx.loadOptions);
     const target = await page.$(selector);
     if (!target) return { missing: 'matches nothing' };
@@ -326,12 +327,27 @@ const pageAttempt = (ctx, selector, interrupt) => {
     const loaf = await page.evaluate(() => window.__mt.loaf);
     return { from, loaf, rec: trace ? await page.evaluate(() => window.__mt.end('c')) : null };
   };
+  attempt.press = async () => {
+    await load(page, url, ctx.loadOptions);
+    const target = await page.$(selector);
+    const point = target && (await reachablePoint(target));
+    if (point) await page.mouse.click(point.x, point.y);
+    return Boolean(point);
+  };
+  return attempt;
 };
 export const clickMeasurer = (ctx, selector, interrupt, makeAttempt = pageAttempt) => {
   const { page } = ctx;
-  const attempt = makeAttempt(ctx, selector, interrupt);
-  // `retries`: how many more recordings a step too coarse to judge may cost (each presses the target again). Nothing else
-  // re-records: a recording with no unresolved motion costs exactly two presses (four with --interrupt), at any cadence.
+  const pressing = makeAttempt(ctx, selector, interrupt);
+  let presses = 0;
+  const attempt = async (trace) => {
+    const done = await pressing(trace);
+    if (!done.missing) presses += interrupt ? 2 : 1;
+    return done;
+  };
+  // `retries`: how many more recordings a step too coarse to judge may cost (each presses the target again). The measurement itself
+  // re-records for nothing else: a recording with no unresolved motion costs exactly two presses (four with --interrupt). The caller
+  // (audit.mjs) re-measures with `retries` 0 to confirm a flaky aspect, and `restore` ends the run in the state it began in.
   const measure = async (retries = CLICK_RESOLVE_RETRIES) => {
     const quiet = await attempt(false);
     if (quiet.missing) return quiet;
@@ -373,6 +389,15 @@ export const clickMeasurer = (ctx, selector, interrupt, makeAttempt = pageAttemp
       interruptSightings: interruptJumps.map((j) => ({ label: j.label, prop: j.prop, dense: isDense(rec.marks.length > 1 ? markCadence(rec, rec.marks[1]) : null) })),
       mounted: rec.mounted,
     };
+  };
+  measure.presses = () => presses;
+  // Without --interrupt a retry is one press: an odd count leaves a target that keeps state (a drawer opened server side) toggled,
+  // so it is pressed once more. With --interrupt every recording presses twice and the count is even.
+  measure.restore = async () => {
+    if (interrupt || presses % 2 === 0 || !pressing.press) return false;
+    const pressed = await pressing.press();
+    if (pressed) presses++;
+    return pressed;
   };
   return measure;
 };

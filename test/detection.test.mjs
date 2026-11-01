@@ -79,27 +79,51 @@ test('controls that appear after the audit started make the run incomplete: exit
   assert.equal(exitCode(waited), 0);
 });
 
-// Nothing moves, so nothing is left to decide: exactly two presses (four with --interrupt), at any cadence (the throttled run is sparse).
-test('--click on a target with nothing to decide presses exactly twice, four times with --interrupt, at any cadence', async () => {
+// Nothing moves, so nothing is left to decide: exactly two presses (four with --interrupt) unless the report says a long frame made the audit
+// confirm it with re-measures (`click.remeasures`), and then still an even count within the cap. The report's own count must match the server's.
+// The cpu 4 run is slower, not necessarily sparse.
+test('--click on a target with nothing to decide presses exactly twice, four times with --interrupt, unless the report shows a confirmation re-measure', async () => {
   for (const cpu of [1, 4]) {
-    srv.stats.requests.length = 0;
-    await audit(`${srv.url}/click-static.html`, { click: '#save', cpu });
-    assert.equal(calls('save'), 2, `cpu ${cpu}`);
-    srv.stats.requests.length = 0;
-    await audit(`${srv.url}/click-static.html`, { click: '#save', interrupt: true, cpu });
-    assert.equal(calls('save'), 4, `cpu ${cpu}`);
+    for (const interrupt of [false, true]) {
+      srv.stats.requests.length = 0;
+      const { click } = await audit(`${srv.url}/click-static.html`, { click: '#save', interrupt, cpu });
+      const per = interrupt ? 2 : 1;
+      assert.equal(click.presses, calls('save'), 'the report counts what the server saw');
+      if (click.remeasures === 0) assert.equal(calls('save'), 2 * per, `cpu ${cpu}`);
+      else assert.ok(calls('save') % 2 === 0 && calls('save') <= 8 * per, `cpu ${cpu}: ${calls('save')} presses after ${click.remeasures} re-measures`);
+    }
   }
 });
 
-// A moving target: a step the frames cannot judge is recorded again (one more press each time, so the count can be odd without
-// --interrupt), within the documented cap; with --interrupt every recording presses twice and the count stays even.
-test('--click on a moving target stays within the documented cap, and even with --interrupt', async () => {
-  srv.stats.requests.length = 0;
-  await audit(`${srv.url}/click-count.html`, { click: '#save' });
-  assert.ok(calls('save') >= 2 && calls('save') <= 8, `${calls('save')} presses`);
-  srv.stats.requests.length = 0;
-  await audit(`${srv.url}/click-count.html`, { click: '#save', interrupt: true });
-  assert.ok(calls('save') >= 4 && calls('save') <= 16 && calls('save') % 2 === 0, `${calls('save')} presses`);
+// A moving target: a step the frames cannot judge is recorded again (one more press each time); an odd count is restored by one more press,
+// so the count is always even, within the documented cap.
+test('--click on a moving target stays even and within the documented cap', async () => {
+  for (const interrupt of [false, true]) {
+    srv.stats.requests.length = 0;
+    const { click } = await audit(`${srv.url}/click-count.html`, { click: '#save', interrupt });
+    assert.equal(click.presses, calls('save'));
+    assert.ok(calls('save') >= 2 * (interrupt ? 2 : 1) && calls('save') <= (interrupt ? 16 : 8) && calls('save') % 2 === 0, `${calls('save')} presses`);
+  }
+});
+
+// A target that keeps state on the server (a drawer that opens and closes at each press) ends where it began.
+test('--click leaves a target with server-side state in the state it began in', async () => {
+  const state = { open: false, presses: 0 };
+  const own = await serve(FIXTURES, { hooks: { '/api/save': (req, res) => { state.open = !state.open; state.presses++; res.writeHead(204); res.end(); } } });
+  try {
+    for (const page of ['click-count.html', 'click-sparse.html']) {
+      for (const interrupt of [false, true]) {
+        state.open = false;
+        state.presses = 0;
+        const { click } = await audit(`${own.url}/${page}`, { click: '#save', interrupt });
+        assert.equal(state.presses, click.presses);
+        assert.equal(state.presses % 2, 0, `${page}: ${state.presses} presses`);
+        assert.equal(state.open, false, `${page}: left open after ${state.presses} presses`);
+      }
+    }
+  } finally {
+    await own.close();
+  }
 });
 
 // click-sparse.html blocks the thread mid-motion: the step is undecided in every recording (two more recordings)
@@ -110,7 +134,7 @@ test('--click on a page that stalls mid-motion presses between six and eight tim
   assert.ok(report.findings.some((f) => f.kind === 'long-frame' && f.element === 'click #save'), JSON.stringify(report.findings.map((f) => [f.kind, f.element])));
   // The re-measures of the flagged long frames always run (6 attempts); the undecided step adds up to 2 more, but
   // with --interrupt the reversal can change the step, so the retries are bounded rather than exact.
-  assert.ok(calls('save') >= 6 && calls('save') <= 8, `${calls('save')} presses`);
+  assert.ok(calls('save') >= 6 && calls('save') <= 8 && calls('save') % 2 === 0, `${calls('save')} presses`);
   srv.stats.requests.length = 0;
   await audit(`${srv.url}/click-sparse.html`, { click: '#save', interrupt: true });
   assert.ok(calls('save') >= 12 && calls('save') <= 16 && calls('save') % 2 === 0, `${calls('save')} presses`);

@@ -1,6 +1,7 @@
 // Shared by the golden-file test, the three-runs script and the updater.
 //
-// The rule, the same on every OS:
+// The rule, applied where frames are dense: ubuntu (the goldens run in the three-runs job with MOTION_REQUIRE_DENSE=1; macOS and Windows
+// run smoke checks only, see test/helpers/shard.mjs):
 // - On a recording that is dense (DENSE_MEDIAN_MS / DENSE_MAX_MS, the product's own constants) the golden is exact and no
 //   inconclusive row of any kind is allowed.
 // - On a sparse recording each expected finding must appear or be replaced by an inconclusive row with its fingerprint, and extra
