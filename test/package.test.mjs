@@ -45,8 +45,13 @@ test('the tracked files at the repository root are all on the list of expected o
   let tracked;
   try { tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { t.skip('not a git checkout (git ls-files failed): there are no tracked files to list'); return; }
   const root = tracked.filter((f) => !f.includes('/')).sort();
-  const allowed = ['.gitattributes', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'NOTICES.md', 'README.md', 'SECURITY.md', 'package-lock.json', 'package.json'];
+  const allowed = ['.gitattributes', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'README.md', 'SECURITY.md', 'package-lock.json', 'package.json'];
   assert.deepEqual(root.filter((f) => !allowed.includes(f)), [], 'a file at the root that is not on the list');
+});
+
+// A copy of the skill directory alone (npx skills add) must still carry the license.
+test('the skill directory carries the same LICENSE as the repository', () => {
+  assert.equal(read('skills', 'motion-audit', 'LICENSE'), read('LICENSE'));
 });
 
 const json = (...p) => JSON.parse(readFileSync(join(ROOT, ...p), 'utf8'));
