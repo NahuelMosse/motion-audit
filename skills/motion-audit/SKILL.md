@@ -113,7 +113,7 @@ against a disposable environment.
 (a pass without the tracer for long frames, one with it for trajectories), four times with
 `--interrupt`. A step the frames were too coarse to judge adds up to two more recordings (one press each,
 two with `--interrupt`), and when a flaky aspect is found the measurement is repeated twice more, two presses
-each: at most eight clicks, sixteen with `--interrupt` (the count is always even: an odd one, after a retry without `--interrupt`, gets one more press that restores the state). Run
+each: at most eight clicks, sixteen with `--interrupt` (the count is always even: an odd one, after a retry without `--interrupt`, gets one more press that restores the state, provided each press's effect lands within the 1.5 s of its recording: a request still pending at the next reload is reported in the notes, one a timer sends later cannot be seen). Run
 it only against a throwaway environment: a "Save" or "Delete" target is saved or deleted several times.
 
 - `--cpu 4` throttles like a mid-range phone. Jank that only shows throttled is still jank.

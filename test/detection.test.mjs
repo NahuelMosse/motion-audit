@@ -277,3 +277,18 @@ test('a hard keyframe teleport is a jump on every dense run and at least an unde
     if (isDense(report.click.cadence)) assert.ok(jump, `run ${run}: dense frames (${JSON.stringify(report.click.cadence)}) and no jump`);
   }
 });
+
+// Each press reloads the page for the next one: a request the last press started and that has not finished is lost, and the report says so.
+test('--click notes a request still pending when the page is reloaded for the next press, and stays silent when they finished', async () => {
+  const slow = await serve(FIXTURES, { hooks: { '/api/save': (req, res) => { setTimeout(() => { res.writeHead(204); res.end(); }, 2600); } } });
+  const quick = await serve(FIXTURES, { hooks: { '/api/save': (req, res) => { res.writeHead(204); res.end(); } } });
+  try {
+    const late = await audit(`${slow.url}/click-count.html`, { click: '#save' });
+    assert.ok(late.notes.some((n) => /click #save: \d+ request\(s\) were still pending when the page was reloaded/.test(n)), late.notes.join(' | '));
+    const prompt = await audit(`${quick.url}/click-count.html`, { click: '#save' });
+    assert.ok(!prompt.notes.some((n) => /still pending/.test(n)), prompt.notes.join(' | '));
+  } finally {
+    await slow.close();
+    await quick.close();
+  }
+});

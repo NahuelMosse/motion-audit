@@ -307,9 +307,26 @@ export const recordingCadence = (rec) => frameCadence(rec, (rec.marks[0] ?? 0) -
 // One press of the target and the recording of what follows it: `trace` records the trajectories, otherwise only the long frames.
 // Each call presses the target once (twice with `interrupt`): the press budget of --click is counted in calls. `.press()` is a bare
 // press, used to restore the state a target keeps (server side, storage) when the count of presses ended odd.
+const REQUEST_TYPES = new Set(['fetch', 'xhr', 'ping', 'other']);
 const pageAttempt = (ctx, selector, interrupt) => {
   const { page, url } = ctx;
+  // Each attempt reloads the page: a request the last press started and that has not finished is lost with it, and so is a timer that
+  // would send one later, so the state the target keeps may differ from the press count. Pending requests are said; timers cannot be seen.
+  const pending = new Set();
+  const started = (r) => { if (REQUEST_TYPES.has(r.resourceType())) pending.add(r); };
+  const ended = (r) => pending.delete(r);
+  page.on('request', started);
+  page.on('requestfinished', ended);
+  page.on('requestfailed', ended);
+  let warned = false;
+  const beforeReload = () => {
+    if (pending.size && !warned) {
+      warned = true;
+      ctx.notes.push(`click ${selector}: ${pending.size} request(s) were still pending when the page was reloaded for the next press: their effect may not have landed, so the state the target keeps may not be restored`);
+    }
+  };
   const attempt = async (trace) => {
+    beforeReload();
     await load(page, url, ctx.loadOptions);
     const target = await page.$(selector);
     if (!target) return { missing: 'matches nothing' };
@@ -327,7 +344,9 @@ const pageAttempt = (ctx, selector, interrupt) => {
     const loaf = await page.evaluate(() => window.__mt.loaf);
     return { from, loaf, rec: trace ? await page.evaluate(() => window.__mt.end('c')) : null };
   };
+  attempt.release = () => { page.off('request', started); page.off('requestfinished', ended); page.off('requestfailed', ended); };
   attempt.press = async () => {
+    beforeReload();
     await load(page, url, ctx.loadOptions);
     const target = await page.$(selector);
     const point = target && (await reachablePoint(target));
@@ -394,9 +413,9 @@ export const clickMeasurer = (ctx, selector, interrupt, makeAttempt = pageAttemp
   // Without --interrupt a retry is one press: an odd count leaves a target that keeps state (a drawer opened server side) toggled,
   // so it is pressed once more. With --interrupt every recording presses twice and the count is even.
   measure.restore = async () => {
-    if (interrupt || presses % 2 === 0 || !pressing.press) return false;
-    const pressed = await pressing.press();
+    const pressed = !interrupt && presses % 2 === 1 && pressing.press ? await pressing.press() : false;
     if (pressed) presses++;
+    pressing.release?.();
     return pressed;
   };
   return measure;
