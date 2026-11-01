@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { audit, exitCode, fingerprint } from '../skills/motion-audit/scripts/lib/index.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
-import { denseInconclusive } from './helpers/golden.mjs';
+import { againstGolden } from './helpers/golden.mjs';
 import { serve } from './helpers/serve.mjs';
 
 let srv;
@@ -44,7 +44,7 @@ test('a hover that re-lays-out a large table is a long-frame error even though n
 test('a toast that teleports in, holds and leaves is a jump error', async () => {
   const report = await audit(`${srv.url}/toast-teleport.html`, { click: '#show' });
   const jump = report.findings.find((f) => f.kind === 'jump' && f.element === 'click #show');
-  assert.deepEqual(denseInconclusive(report), [], 'inconclusive although the recorded frames were dense (60 Hz)');
+  assert.deepEqual(againstGolden(report, [], 0).problems, [], 'an inconclusive row breaks the rule of golden.mjs');
   if (jump) {
     assert.equal(jump.level, 'error');
     assert.match(jump.detail, /translateX jumps/);
@@ -165,6 +165,52 @@ test('audit(page) leaves the page as it found it: CPU throttle off, tracer stopp
     assert.equal(await page.evaluate(() => typeof window.__mt), 'undefined');
     await page.reload();
     assert.equal(await page.evaluate(() => typeof window.__mt), 'undefined', 'the init script is gone on later navigations');
+  } finally {
+    await context.close();
+  }
+});
+
+// What the judge and the sighting rule rely on, read from the real tracer: no hand-set fields.
+test('the real tracer records the root and its label, frame times, animation events and the cadence the rows carry', async () => {
+  const { tracer } = await import('../skills/motion-audit/scripts/lib/page-tracer.mjs');
+  const { TRACER_CONFIG } = await import('../skills/motion-audit/scripts/lib/browser.mjs');
+  const { frameCadence } = await import('../skills/motion-audit/scripts/lib/probes.mjs');
+  const { analyzeRecording } = await import('../skills/motion-audit/scripts/lib/series.mjs');
+  const { judgeElement } = await import('../skills/motion-audit/scripts/lib/judge.mjs');
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  try {
+    await context.addInitScript(tracer, TRACER_CONFIG);
+    await page.goto(`${srv.url}/css-transitions.html`);
+    await page.waitForTimeout(300);
+    const root = await page.$('.box');
+    await root.evaluate((n) => window.__mt.begin('m', n));
+    await page.evaluate(() => { document.getElementById('lane').classList.add('on'); });
+    await page.waitForTimeout(900);
+    const rec = await page.evaluate(() => window.__mt.end('m'));
+    // the root, labelled the way the judge keys its findings
+    const rootElem = rec.elems.find((e) => e.root);
+    assert.equal(rootElem.label, 'div.box');
+    assert.equal(rec.elems.filter((e) => e.root).length, 1);
+    // frame times and the times each sample was read: same length, increasing
+    assert.ok(rootElem.t.length > 10 && rootElem.t.length === rootElem.r.length);
+    assert.ok(rootElem.t.every((x, i) => i === 0 || x > rootElem.t[i - 1]));
+    // the CSS transition of the root, as an animation event of that node
+    const own = rec.anims.filter((a) => a.nodeId === rootElem.id && a.type === 'transition');
+    assert.ok(own.length > 0 && own.every((a) => Array.isArray(a.props)) && own.some((a) => a.props.includes('left')), JSON.stringify(rec.anims));
+    // the motion analysis and the cadence agree with the recorded frames
+    const motion = analyzeRecording(rec);
+    const left = motion.find((e) => e.root)?.moves.find((m) => m.prop === 'left');
+    assert.ok(left && left.samples > 1 && left.cadence.max >= left.cadence.median);
+    const cadence = frameCadence(rec);
+    assert.ok(cadence.max >= left.cadence.max - 1);
+    // through the judge as auditElement hands it over: a declared ease-out asks nothing of the recording
+    const transition = (easing) => ({ properties: ['left'], durations: [400], easings: [easing] });
+    const gesture = (easing) => ({ label: 'div.box', kind: 'div', selected: false, transition: transition(easing), long: [], moments: { press: { changed: ['left'], pixels: true, rootLabel: rootElem.label, cadence, motion, transition: transition(easing) } } });
+    assert.deepEqual(judgeElement(gesture('cubic-bezier(0.23, 1, 0.32, 1)')).filter((f) => f.kind === 'inconclusive' || f.kind === 'ease-in'), []);
+    // a declared ease-in is measured in the same recording: an ease-in finding or, if this machine's frames were sparse, a row with a sparse cadence
+    const eased = judgeElement(gesture('ease-in')).filter((f) => f.key === 'measured div.box' || f.key === 'declared left');
+    assert.ok(eased.some((f) => f.key === 'declared left'));
   } finally {
     await context.close();
   }

@@ -147,3 +147,30 @@ test('a declared ease-in: the measured ease-in is ruled out only by a recording 
   // a declared ease-out asks nothing either
   assert.deepEqual(judged([], ['transform'], 'cubic-bezier(0.23, 1, 0.32, 1)'), []);
 });
+
+// A declared ease-in too short to hold the minimum samples at 60 Hz is judged by its declared curve only: whatever the phase of
+// the frames, a 60 Hz recording never ends in an inconclusive row, from 30 ms to 600 ms.
+test('declared ease-ins of 30 to 600 ms at 60 Hz, at every frame phase, leave no inconclusive row', async () => {
+  const { analyzeRecording } = await import('../skills/motion-audit/scripts/lib/series.mjs');
+  const { FRAME, txElement } = await import('./helpers/curves.mjs');
+  const LABEL = 'button.save';
+  const curves = { 'ease-in': (u) => u ** 2, cubic: (u) => u ** 3 };
+  let ease = 0;
+  for (const duration of [30, 40, 50, 60, 80, 100, 120, 160, 200, 300, 450, 600]) {
+    for (let phase = 0; phase < 16; phase++) {
+      for (const [name, curve] of Object.entries(curves)) {
+        const times = Array.from({ length: 60 }, (_, i) => (i - 3) * FRAME - (phase * FRAME) / 16);
+        const tx = times.map((t) => (t <= 0 ? 0 : 200 * curve(Math.min(1, t / duration))));
+        const motion = analyzeRecording({ elems: [txElement(times, tx, { root: true, label: LABEL })], anims: [], marks: [] });
+        const out = judgeElement(element({
+          transition: transition(['transform'], duration, 'ease-in'),
+          moments: { press: moment({ changed: ['transform'], rootLabel: LABEL, transition: transition(['transform'], duration, 'ease-in'), motion }) },
+        }));
+        const rows = out.filter((f) => f.kind === 'inconclusive');
+        assert.deepEqual(rows, [], `${duration} ms ${name}, phase ${phase}: ${rows[0]?.detail}`);
+        ease += out.filter((f) => f.kind === 'ease-in' && f.key === `declared transform`).length;
+      }
+    }
+  }
+  assert.ok(ease > 0, 'the declared curve is still judged');
+});

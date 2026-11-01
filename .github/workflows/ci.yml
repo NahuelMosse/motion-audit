@@ -59,7 +59,7 @@ jobs:
           MA_SHARD: ${{ matrix.shard }}/3
           MA_SKIP_GOLDEN: ${{ runner.os == 'Linux' && '1' || '' }}
 
-  # Every fixture three times on Linux: identical fingerprints each time, equal to the golden file.
+  # Every fixture three times on Linux: identical fingerprints each time, equal to the golden file, with dense recordings required.
   stability:
     name: three runs (ubuntu, shard ${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
@@ -80,6 +80,9 @@ jobs:
         run: node test/helpers/fixture-runs.mjs 3
         env:
           MA_SHARD: ${{ matrix.shard }}/6
+          # Exact goldens with no inconclusive row, and a failure if no recording was dense: a slow runner must not turn the
+          # whole suite into "everything is tolerated" (see test/helpers/golden.mjs).
+          MOTION_REQUIRE_DENSE: '1'
 
   validate:
     runs-on: ubuntu-latest
