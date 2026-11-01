@@ -79,14 +79,27 @@ test('controls that appear after the audit started make the run incomplete: exit
   assert.equal(exitCode(waited), 0);
 });
 
-// A noisy machine can flag a long frame and add re-measures, so the steady page is bounded rather than exact.
-test('--click on a steady page presses the target twice, four times with --interrupt', async () => {
+// Nothing moves, so nothing is left to decide: exactly two presses (four with --interrupt), at any cadence (the throttled run is sparse).
+test('--click on a target with nothing to decide presses exactly twice, four times with --interrupt, at any cadence', async () => {
+  for (const cpu of [1, 4]) {
+    srv.stats.requests.length = 0;
+    await audit(`${srv.url}/click-static.html`, { click: '#save', cpu });
+    assert.equal(calls('save'), 2, `cpu ${cpu}`);
+    srv.stats.requests.length = 0;
+    await audit(`${srv.url}/click-static.html`, { click: '#save', interrupt: true, cpu });
+    assert.equal(calls('save'), 4, `cpu ${cpu}`);
+  }
+});
+
+// A moving target: a step the frames cannot judge is recorded again (one more press each time, so the count can be odd without
+// --interrupt), within the documented cap; with --interrupt every recording presses twice and the count stays even.
+test('--click on a moving target stays within the documented cap, and even with --interrupt', async () => {
   srv.stats.requests.length = 0;
   await audit(`${srv.url}/click-count.html`, { click: '#save' });
-  assert.ok(calls('save') >= 2 && calls('save') <= 8 && calls('save') % 2 === 0, `${calls('save')} presses`);
+  assert.ok(calls('save') >= 2 && calls('save') <= 8, `${calls('save')} presses`);
   srv.stats.requests.length = 0;
   await audit(`${srv.url}/click-count.html`, { click: '#save', interrupt: true });
-  assert.ok(calls('save') >= 4 && calls('save') <= 16 && calls('save') % 4 === 0, `${calls('save')} presses`);
+  assert.ok(calls('save') >= 4 && calls('save') <= 16 && calls('save') % 2 === 0, `${calls('save')} presses`);
 });
 
 // click-sparse.html blocks the thread mid-motion: the step is undecided in every recording (two more recordings)
