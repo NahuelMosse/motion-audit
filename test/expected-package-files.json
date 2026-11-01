@@ -3,6 +3,8 @@
   "LICENSE",
   "README.md",
   "package.json",
+  "skills/motion-audit/LICENSE",
+  "skills/motion-audit/NOTICES.md",
   "skills/motion-audit/SKILL.md",
   "skills/motion-audit/references/fixes.md",
   "skills/motion-audit/scripts/lib/args.mjs",

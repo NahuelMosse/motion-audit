@@ -138,4 +138,4 @@ MA_SHARD=2/6 npm run test:browser         # one slice of the browser tests (CI r
 
 ## License
 
-MIT. See [NOTICES.md](NOTICES.md) for credits.
+MIT. See [NOTICES.md](skills/motion-audit/NOTICES.md) for credits.
