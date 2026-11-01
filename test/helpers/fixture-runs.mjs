@@ -5,7 +5,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CLI_MATRIX } from '../fixture-matrix.mjs';
 import { FIXTURES, kindsOf, removeScratch, runCli } from './cli.mjs';
-import { GOLDEN_PATH, againstGolden, denseInconclusive, signature } from './golden.mjs';
+import { GOLDEN_PATH, againstGolden, densityTally, noteRecording, requireSomeDense } from './golden.mjs';
 import { inShard } from './shard.mjs';
 import { serve } from './serve.mjs';
 
@@ -21,10 +21,11 @@ export const runMatrix = async ({ runs = 3, filter = '', log = console.log } = {
         const started = Date.now();
         const r = await runCli([`${srv.url}/${entry.fixture}`, ...entry.args, '--json']);
         const seconds = Math.round((Date.now() - started) / 1000);
-        const got = r.report ? againstGolden(signature(r.report), golden[entry.name].findings, golden[entry.name].exit) : null;
+        if (r.report) noteRecording(r.report);
+        const got = r.report ? againstGolden(r.report, golden[entry.name].findings, golden[entry.name].exit) : null;
         const sig = got ? got.findings.join(',') : `no-report:${r.stderr.slice(0, 80)}`;
-        const stuck = r.report ? denseInconclusive(r.report) : [];
-        if (stuck.length) log(`  inconclusive although the recorded frames were dense (a stuck gate): ${stuck.join('; ')}`);
+        const stuck = got?.problems ?? [];
+        for (const p of stuck) log(`  ${p}`);
         const matchesGolden = Boolean(got) && JSON.stringify(got.findings) === JSON.stringify(golden[entry.name].findings) && r.code === got.exit && !stuck.length;
         seen.push({ code: r.code, sig, seconds, matchesGolden, kinds: r.report ? kindsOf(r.report) : [] });
       }
@@ -49,5 +50,7 @@ export const runMatrix = async ({ runs = 3, filter = '', log = console.log } = {
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const results = await runMatrix({ runs: Number(process.argv[2] ?? 3), filter: process.argv[3] ?? '' });
-  process.exitCode = results.length && results.every((r) => r.stable && r.golden) ? 0 : 1;
+  const none = requireSomeDense();
+  for (const p of none) console.log(`${p} ${JSON.stringify(densityTally())}`);
+  process.exitCode = results.length && results.every((r) => r.stable && r.golden) && !none.length ? 0 : 1;
 }

@@ -243,5 +243,9 @@
       "warning|no-feedback:6a82ee342a|a \"Read the docs\"",
       "warning|no-press-feedback:d70ef5b48b|button \"Save changes\""
     ]
+  },
+  "css-transitions": {
+    "exit": 0,
+    "findings": []
   }
 }

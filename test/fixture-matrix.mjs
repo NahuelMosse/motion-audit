@@ -30,4 +30,5 @@ export const CLI_MATRIX = [
   { name: 'side-effects', fixture: 'side-effects.html', args: [] },
   { name: 'late-controls-waited', fixture: 'late-controls.html', args: ['--wait-for', 'button'] },
   { name: 'shadcn-fixed', fixture: 'shadcn-fixed.html', args: [] },
+  { name: 'css-transitions', fixture: 'css-transitions.html', args: ['--click', '#go', '--interrupt'] },
 ];

@@ -1,5 +1,5 @@
 import { after, before } from 'node:test';
-import { sharded as test } from './helpers/shard.mjs';
+import { exact, sharded as test } from './helpers/shard.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { audit, exitCode, fingerprint } from '../skills/motion-audit/scripts/lib/index.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
-import { denseInconclusive } from './helpers/golden.mjs';
+import { againstGolden } from './helpers/golden.mjs';
 import { serve } from './helpers/serve.mjs';
 
 let srv;
@@ -44,7 +44,7 @@ test('a hover that re-lays-out a large table is a long-frame error even though n
 test('a toast that teleports in, holds and leaves is a jump error', async () => {
   const report = await audit(`${srv.url}/toast-teleport.html`, { click: '#show' });
   const jump = report.findings.find((f) => f.kind === 'jump' && f.element === 'click #show');
-  assert.deepEqual(denseInconclusive(report), [], 'inconclusive although the recorded frames were dense (60 Hz)');
+  assert.deepEqual(againstGolden(report, [], 0).problems, [], 'an inconclusive row breaks the rule of golden.mjs');
   if (jump) {
     assert.equal(jump.level, 'error');
     assert.match(jump.detail, /translateX jumps/);
@@ -57,7 +57,7 @@ test('a toast that teleports in, holds and leaves is a jump error', async () => 
   assert.equal(unsure.level, 'warning');
 });
 
-test('a node re-mounted mid-animation is a jump error', async () => {
+exact('a node re-mounted mid-animation is a jump error', async () => {
   const report = await audit(`${srv.url}/remount.html`, { click: '#open' });
   const jump = report.findings.find((f) => f.kind === 'jump' && f.element === 'click #open');
   assert.ok(jump, JSON.stringify(report.findings.map((f) => [f.kind, f.element, f.detail])));
@@ -79,14 +79,51 @@ test('controls that appear after the audit started make the run incomplete: exit
   assert.equal(exitCode(waited), 0);
 });
 
-// A noisy machine can flag a long frame and add re-measures, so the steady page is bounded rather than exact.
-test('--click on a steady page presses the target twice, four times with --interrupt', async () => {
-  srv.stats.requests.length = 0;
-  await audit(`${srv.url}/click-count.html`, { click: '#save' });
-  assert.ok(calls('save') >= 2 && calls('save') <= 8 && calls('save') % 2 === 0, `${calls('save')} presses`);
-  srv.stats.requests.length = 0;
-  await audit(`${srv.url}/click-count.html`, { click: '#save', interrupt: true });
-  assert.ok(calls('save') >= 4 && calls('save') <= 16 && calls('save') % 4 === 0, `${calls('save')} presses`);
+// Nothing moves, so nothing is left to decide: exactly two presses (four with --interrupt) unless the report says a long frame made the audit
+// confirm it with re-measures (`click.remeasures`), and then still an even count within the cap. The report's own count must match the server's.
+// The cpu 4 run is slower, not necessarily sparse.
+test('--click on a target with nothing to decide presses exactly twice, four times with --interrupt, unless the report shows a confirmation re-measure', async () => {
+  for (const cpu of [1, 4]) {
+    for (const interrupt of [false, true]) {
+      srv.stats.requests.length = 0;
+      const { click } = await audit(`${srv.url}/click-static.html`, { click: '#save', interrupt, cpu });
+      const per = interrupt ? 2 : 1;
+      assert.equal(click.presses, calls('save'), 'the report counts what the server saw');
+      if (click.remeasures === 0) assert.equal(calls('save'), 2 * per, `cpu ${cpu}`);
+      else assert.ok(calls('save') % 2 === 0 && calls('save') <= 8 * per, `cpu ${cpu}: ${calls('save')} presses after ${click.remeasures} re-measures`);
+    }
+  }
+});
+
+// A moving target: a step the frames cannot judge is recorded again (one more press each time); an odd count is restored by one more press,
+// so the count is always even, within the documented cap.
+test('--click on a moving target stays even and within the documented cap', async () => {
+  for (const interrupt of [false, true]) {
+    srv.stats.requests.length = 0;
+    const { click } = await audit(`${srv.url}/click-count.html`, { click: '#save', interrupt });
+    assert.equal(click.presses, calls('save'));
+    assert.ok(calls('save') >= 2 * (interrupt ? 2 : 1) && calls('save') <= (interrupt ? 16 : 8) && calls('save') % 2 === 0, `${calls('save')} presses`);
+  }
+});
+
+// A target that keeps state on the server (a drawer that opens and closes at each press) ends where it began.
+test('--click leaves a target with server-side state in the state it began in', async () => {
+  const state = { open: false, presses: 0 };
+  const own = await serve(FIXTURES, { hooks: { '/api/save': (req, res) => { state.open = !state.open; state.presses++; res.writeHead(204); res.end(); } } });
+  try {
+    for (const page of ['click-count.html', 'click-sparse.html']) {
+      for (const interrupt of [false, true]) {
+        state.open = false;
+        state.presses = 0;
+        const { click } = await audit(`${own.url}/${page}`, { click: '#save', interrupt });
+        assert.equal(state.presses, click.presses);
+        assert.equal(state.presses % 2, 0, `${page}: ${state.presses} presses`);
+        assert.equal(state.open, false, `${page}: left open after ${state.presses} presses`);
+      }
+    }
+  } finally {
+    await own.close();
+  }
 });
 
 // click-sparse.html blocks the thread mid-motion: the step is undecided in every recording (two more recordings)
@@ -97,7 +134,7 @@ test('--click on a page that stalls mid-motion presses between six and eight tim
   assert.ok(report.findings.some((f) => f.kind === 'long-frame' && f.element === 'click #save'), JSON.stringify(report.findings.map((f) => [f.kind, f.element])));
   // The re-measures of the flagged long frames always run (6 attempts); the undecided step adds up to 2 more, but
   // with --interrupt the reversal can change the step, so the retries are bounded rather than exact.
-  assert.ok(calls('save') >= 6 && calls('save') <= 8, `${calls('save')} presses`);
+  assert.ok(calls('save') >= 6 && calls('save') <= 8 && calls('save') % 2 === 0, `${calls('save')} presses`);
   srv.stats.requests.length = 0;
   await audit(`${srv.url}/click-sparse.html`, { click: '#save', interrupt: true });
   assert.ok(calls('save') >= 12 && calls('save') <= 16 && calls('save') % 2 === 0, `${calls('save')} presses`);
@@ -165,6 +202,52 @@ test('audit(page) leaves the page as it found it: CPU throttle off, tracer stopp
     assert.equal(await page.evaluate(() => typeof window.__mt), 'undefined');
     await page.reload();
     assert.equal(await page.evaluate(() => typeof window.__mt), 'undefined', 'the init script is gone on later navigations');
+  } finally {
+    await context.close();
+  }
+});
+
+// What the judge and the sighting rule rely on, read from the real tracer: no hand-set fields.
+test('the real tracer records the root and its label, frame times, animation events and the cadence the rows carry', async () => {
+  const { tracer } = await import('../skills/motion-audit/scripts/lib/page-tracer.mjs');
+  const { TRACER_CONFIG } = await import('../skills/motion-audit/scripts/lib/browser.mjs');
+  const { frameCadence } = await import('../skills/motion-audit/scripts/lib/probes.mjs');
+  const { analyzeRecording } = await import('../skills/motion-audit/scripts/lib/series.mjs');
+  const { judgeElement } = await import('../skills/motion-audit/scripts/lib/judge.mjs');
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  try {
+    await context.addInitScript(tracer, TRACER_CONFIG);
+    await page.goto(`${srv.url}/css-transitions.html`);
+    await page.waitForTimeout(300);
+    const root = await page.$('.box');
+    await root.evaluate((n) => window.__mt.begin('m', n));
+    await page.evaluate(() => { document.getElementById('lane').classList.add('on'); });
+    await page.waitForTimeout(900);
+    const rec = await page.evaluate(() => window.__mt.end('m'));
+    // the root, labelled the way the judge keys its findings
+    const rootElem = rec.elems.find((e) => e.root);
+    assert.equal(rootElem.label, 'div.box');
+    assert.equal(rec.elems.filter((e) => e.root).length, 1);
+    // frame times and the times each sample was read: same length, increasing
+    assert.ok(rootElem.t.length > 10 && rootElem.t.length === rootElem.r.length);
+    assert.ok(rootElem.t.every((x, i) => i === 0 || x > rootElem.t[i - 1]));
+    // the CSS transition of the root, as an animation event of that node
+    const own = rec.anims.filter((a) => a.nodeId === rootElem.id && a.type === 'transition');
+    assert.ok(own.length > 0 && own.every((a) => Array.isArray(a.props)) && own.some((a) => a.props.includes('left')), JSON.stringify(rec.anims));
+    // the motion analysis and the cadence agree with the recorded frames
+    const motion = analyzeRecording(rec);
+    const left = motion.find((e) => e.root)?.moves.find((m) => m.prop === 'left');
+    assert.ok(left && left.samples > 1 && left.cadence.max >= left.cadence.median);
+    const cadence = frameCadence(rec);
+    assert.ok(cadence.max >= left.cadence.max - 1);
+    // through the judge as auditElement hands it over: a declared ease-out asks nothing of the recording
+    const transition = (easing) => ({ properties: ['left'], durations: [400], easings: [easing] });
+    const gesture = (easing) => ({ label: 'div.box', kind: 'div', selected: false, transition: transition(easing), long: [], moments: { press: { changed: ['left'], pixels: true, rootLabel: rootElem.label, cadence, motion, transition: transition(easing) } } });
+    assert.deepEqual(judgeElement(gesture('cubic-bezier(0.23, 1, 0.32, 1)')).filter((f) => f.kind === 'inconclusive' || f.kind === 'ease-in'), []);
+    // a declared ease-in is measured in the same recording: an ease-in finding or, if this machine's frames were sparse, a row with a sparse cadence
+    const eased = judgeElement(gesture('ease-in')).filter((f) => f.key === 'measured div.box' || f.key === 'declared left');
+    assert.ok(eased.some((f) => f.key === 'declared left'));
   } finally {
     await context.close();
   }

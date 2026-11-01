@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MIN_PLAYWRIGHT, MAX_TOGGLES, NOISY_UNATTRIBUTED_MS, ENV_NOISE_MIN_ELEMENTS, SERIES_DENSE_MAX_DT_MS, RECOUNT_AFTER_MS, SCHEMA_VERSION,
+  CONFIRM_MAJORITY, CONFIRM_RUNS, DEFAULT_MAX_ELEMENTS, FRAME_NOISE_FACTOR, INTERACTIVE, LONG_FRAME_MS, MIN_PLAYWRIGHT, MAX_TOGGLES, NOISY_UNATTRIBUTED_MS, ENV_NOISE_MIN_ELEMENTS, RECOUNT_AFTER_MS, SCHEMA_VERSION,
   SCROLL_STEP_MS, SCROLL_STEP_PX, SCROLL_TAIL_MS, TOGGLE, VIEWPORT,
 } from './constants.mjs';
 import { UsageError } from './args.mjs';
@@ -13,8 +13,9 @@ import { finalize, loadConfig, validateConfig } from './config.mjs';
 import { inconsistencies, judgeElement } from './judge.mjs';
 import { devSignals, cssPath, describeElement, hasReducedMotionRule, invisibleContent, reachability, scrollPass, ungatedHoverMotion } from './page-scripts.mjs';
 import { tracer } from './page-tracer.mjs';
+import { clickRerun, clickRows, confirmToggle, toggleRow, undecidedOf } from './undecided.mjs';
 import { loadPlaywright } from './playwright.mjs';
-import { auditElement, clickMeasurer, decidable, unconfirmedVerdict, contactSheet, eligibleToggles, probeToggle, reducedPass } from './probes.mjs';
+import { auditElement, clickMeasurer, contactSheet, eligibleToggles, probeToggle, reducedPass } from './probes.mjs';
 
 const SCROLL_OPTIONS = { step: SCROLL_STEP_PX, stepMs: SCROLL_STEP_MS, tail: SCROLL_TAIL_MS, maxScrollers: 5 };
 const MAX_SKIP_EXAMPLES = 3;
@@ -40,25 +41,6 @@ const elementAspects = (first) => ({
   interrupt: (e) => (e.interrupt?.length ?? 0) > 0,
   jump: (e) => jumpKeys(e).length > 0,
 });
-// A flaky aspect that is dropped leaves an undecided row (same fingerprint as the finding) unless a re-measure that could
-// judge the motion ruled it out, or the sighting was in sparse frames: see unconfirmedVerdict.
-export const undecidedOf = (el, later) => {
-  const rows = later.filter(Boolean);
-  const out = [];
-  const unconfirmed = el.unconfirmed ?? [];
-  if (unconfirmed.includes('interrupt') && unconfirmedVerdict({ sightedDense: el.interruptDense }, rows.map((x) => ({ jumps: x.interrupt ?? [], decidable: !x.interruptUnsure }))) === 'inconclusive') {
-    out.push({ check: 'interrupt-jump', key: 'hover', detail: 'hover left mid-way: a jump was seen in one recording and not in the re-measures', cadence: el.interruptCadence ?? { median: '?', max: '?' } });
-  }
-  if (unconfirmed.includes('jump')) {
-    const motions = (x) => Object.values(x.moments).flatMap((d) => d.motion);
-    for (const [moment, d] of Object.entries(el.moments)) for (const e of d.motion) for (const m of e.moves) {
-      if (!m.jumps.length || !e.scripted) continue;
-      const verdict = unconfirmedVerdict({ sightedDense: m.cadence.max <= SERIES_DENSE_MAX_DT_MS }, rows.map((x) => ({ jumps: [], decidable: decidable(motions(x)) })));
-      if (verdict === 'inconclusive') out.push({ check: 'jump', key: `${moment} ${e.label} ${m.prop}`, detail: `${moment}: ${e.label} ${m.prop} showed a jump in one recording and not in the re-measures`, cadence: m.cadence });
-    }
-  }
-  return out;
-};
 const dropUnconfirmed = (el) => {
   for (const name of el.unconfirmed ?? []) {
     if (name.startsWith('long:')) el.long = el.long.filter((l) => l.moment !== name.slice(5));
@@ -233,7 +215,7 @@ export const audit = async (pageOrUrl, o = {}) => {
         if (!r.label) continue;
         if (r.jumps.length) {
           const again = [await probeToggle(ctx, index), await probeToggle(ctx, index)];
-          if (1 + again.filter((x) => x.jumps.length).length < CONFIRM_MAJORITY) r = { ...r, jumps: [], undecided: unconfirmedVerdict({ sightedDense: r.dense }, again.map((x) => ({ jumps: x.jumps, decidable: !x.unsure }))) === 'inconclusive' };
+          r = confirmToggle(r, again);
         }
         coverage.toggles.probed++;
         toggles.push(r);
@@ -241,10 +223,8 @@ export const audit = async (pageOrUrl, o = {}) => {
           const top = [...new Map(r.jumps.map((j) => [j.label, j])).values()].slice(0, 3).map((j) => `${j.label} ${j.prop} ${j.from} -> ${j.to} in one frame (${j.direction}, ${j.delta})`).join('; ');
           add('not-interruptible', r.label, `reversed part-way through its ${r.dur} ms motion the animation restarts instead of continuing: ${top}`, 'toggle');
         }
-        if (!r.jumps.length && (r.undecided || r.unsure)) {
-          const c = r.unsure ?? r.cadence ?? { median: '?', max: '?' };
-          raw.push({ kind: 'inconclusive', check: 'not-interruptible', element: r.label, key: 'toggle', detail: `reversed part-way through its motion: ${r.undecided && !r.unsure ? 'a restart was seen in one recording and not in the re-measures' : 'an animation restart cannot be followed'}: frames too sparse: median Δt ${c.median} ms, max ${c.max} ms` });
-        }
+        const undecided = toggleRow(r);
+        if (undecided) raw.push(undecided);
         if (!sameLocation(page.url(), landed)) { notes.push(`toggling ${r.label} navigated to ${page.url()}: toggle probing stopped`); break; }
       }
       if (eligible.length > MAX_TOGGLES) coverage.toggles.skipped[`beyond ${MAX_TOGGLES} toggles`] = eligible.length - MAX_TOGGLES;
@@ -255,30 +235,18 @@ export const audit = async (pageOrUrl, o = {}) => {
     if (o.click) {
       const measure = clickMeasurer(ctx, o.click, o.interrupt);
       let r = await measure();
-      if (r.missing) add('click-target', o.click, `${o.click} ${r.missing}`, 'target');
+      if (r.missing) { add('click-target', o.click, `${o.click} ${r.missing}`, 'target'); await measure.restore(); }
       else {
+        const label = `click ${o.click}`;
         const holder = { long: r.long, jumps: r.jumps, interrupt: r.interrupt };
         const reruns = [];
-        await confirm(holder, { long: (x) => x.long.length > 0, jump: (x) => x.jumps.length > 0, interrupt: (x) => x.interrupt.length > 0 }, async () => {
-          const again = await measure(0);
-          if (!again.missing) reruns.push(again);
-          return again.missing ? null : again;
-        });
-        const unconfirmedInterrupt = r.interrupt.length > 0 && (holder.unconfirmed ?? []).includes('interrupt') && unconfirmedVerdict({ sightedDense: r.interruptDense }, reruns.map((x) => ({ jumps: x.interrupt, decidable: !x.interruptUnsure }))) === 'inconclusive';
-        const unconfirmedJump = r.jumps.length > 0 && r.jumpScripted && (holder.unconfirmed ?? []).includes('jump') && unconfirmedVerdict(r, reruns) === 'inconclusive';
+        const later = await confirm(holder, { long: (x) => x.long.length > 0, jump: (x) => x.jumps.length > 0, interrupt: (x) => x.interrupt.length > 0 }, clickRerun(measure, reruns));
+        const undecidedRows = clickRows(label, r, holder.unconfirmed ?? [], reruns);
         for (const name of holder.unconfirmed ?? []) r = { ...r, [name === 'jump' ? 'jumps' : name]: [] };
-        click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, cadence: r.cadence, long: r.long, interrupt: r.interrupt };
-        const label = `click ${o.click}`;
-        // A jump seen in one recording that no decidable re-measure rules out (or that was a clear step in dense frames and
-        // is not reproduced) is neither reported nor dropped: it stays visible as undecided.
-        if (!r.jumps.length && (r.unsure || unconfirmedJump)) {
-          const c = r.unsure ?? r.cadence ?? { median: '?', max: '?' };
-          raw.push({ kind: 'inconclusive', check: 'jump', element: label, key: 'click', detail: `${unconfirmedJump && !r.unsure ? 'a jump was seen in one recording and not in the re-measures' : 'a step in the transition could be a jump'}: frames too sparse: median Δt ${c.median} ms, max ${c.max} ms` });
-        }
-        if (!r.interrupt.length && (r.interruptUnsure || unconfirmedInterrupt)) {
-          const c = r.interruptUnsure ?? r.cadence ?? { median: '?', max: '?' };
-          raw.push({ kind: 'inconclusive', check: 'interrupt-jump', element: label, key: 'click', detail: `second click: ${unconfirmedInterrupt && !r.interruptUnsure ? 'a jump was seen in one recording and not in the re-measures' : 'the animation restarted but the value cannot be followed'}: frames too sparse: median Δt ${c.median} ms, max ${c.max} ms` });
-        }
+        // Back to the state the target started in when the presses ended odd (a retry is one press).
+        const restored = await measure.restore();
+        click = { selector: o.click, moved: r.moved.length, mounted: r.mounted, cadence: r.cadence, long: r.long, interrupt: r.interrupt, presses: measure.presses(), remeasures: later.length, restored };
+        raw.push(...undecidedRows);
         if (r.jumps.length) add('jump', label, `${r.jumps.slice(0, 4).map((j) => `${j.label} ${j.prop} jumps ${j.size} at ${j.atMs} ms`).join('; ')}${r.jumps.length > 4 ? ` (+${r.jumps.length - 4} more)` : ''}`, 'click');
         for (const l of r.layout) add('layout-animated', label, `${l.label} animates its ${l.prop === 'layoutWidth' ? 'width' : 'height'} over ${l.durationMs} ms`, `${l.label} ${l.prop}`);
         if (r.long.length) add('long-frame', label, `during the transition: ${describeLongFrames(r.long)}`, 'click');

@@ -20,7 +20,7 @@
   },
   "scripts": {
     "test": "node --test --test-concurrency=2 \"test/**/*.test.mjs\"",
-    "test:unit": "node --test test/args.test.mjs test/config.test.mjs test/continuity.test.mjs test/docs.test.mjs test/gates.test.mjs test/judge.test.mjs test/long-frames.test.mjs test/package.test.mjs test/playwright-resolution.test.mjs test/reduced-and-compare.test.mjs test/segments.test.mjs test/series.test.mjs test/skill-doc.test.mjs",
+    "test:unit": "node --test test/args.test.mjs test/config.test.mjs test/continuity.test.mjs test/docs.test.mjs test/gates.test.mjs test/press-count.test.mjs test/sightings.test.mjs test/judge.test.mjs test/long-frames.test.mjs test/package.test.mjs test/playwright-resolution.test.mjs test/reduced-and-compare.test.mjs test/segments.test.mjs test/series.test.mjs test/skill-doc.test.mjs",
     "test:browser": "node --test --test-concurrency=1 test/cli.test.mjs test/detection.test.mjs test/fixtures.test.mjs test/interact-safety.test.mjs test/readme-example.test.mjs test/redirect.test.mjs",
     "fixtures": "node test/helpers/fixture-runs.mjs 3"
   },

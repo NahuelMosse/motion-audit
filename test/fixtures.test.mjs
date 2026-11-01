@@ -1,5 +1,5 @@
 import { after, before } from 'node:test';
-import { inShard, sharded as test } from './helpers/shard.mjs';
+import { EXACT_ONLY_REASON, SMOKE_ONLY, exact, inShard, sharded as test } from './helpers/shard.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import { audit, exitCode } from '../skills/motion-audit/scripts/lib/index.mjs';
 import { CLI_MATRIX } from './fixture-matrix.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
-import { GOLDEN_PATH, againstGolden, denseInconclusive, signature } from './helpers/golden.mjs';
+import { GOLDEN_PATH, againstGolden, densityTally, noteRecording, reportDense, requireSomeDense } from './helpers/golden.mjs';
 import { serve } from './helpers/serve.mjs';
 
 let srv;
@@ -31,19 +31,29 @@ after(async () => {
 
 const golden = JSON.parse(readFileSync(GOLDEN_PATH, 'utf8'));
 
+// With MOTION_REQUIRE_DENSE a run in which no recording was dense fails: a slow runner must not make everything tolerated.
+after(() => { const problems = requireSomeDense(); if (problems.length) throw new Error(`${problems[0]} (${JSON.stringify(densityTally())})`); });
+
+// The fixtures that only have good motion (pure CSS transitions, eased out): a dense recording of them has no inconclusive row.
+const CLEAN = new Set(['good', 'drawer-good', 'shadcn-fixed', 'table-toast-cpu4', 'css-transitions', 'shadcn']);
+
 // The golden comparison of every matrix entry. The three-runs job (fixture-runs.mjs) compares each
 // of its runs to the same golden file, so a job that runs it sets MA_SKIP_GOLDEN to audit nothing twice.
 for (const [position, entry] of CLI_MATRIX.entries()) {
-  const skip = process.env.MA_SKIP_GOLDEN ? 'covered by the three-runs job' : !inShard(entry.name, position) && 'other shard';
+  const skip = SMOKE_ONLY ? EXACT_ONLY_REASON : process.env.MA_SKIP_GOLDEN ? 'covered by the three-runs job (ubuntu, MOTION_REQUIRE_DENSE=1)' : !inShard(entry.name, position) && 'other shard';
   test(`fixture ${entry.name} yields exactly the expected findings and exit code`, { skip }, async (t) => {
     const r = await runCli([`${srv.url}/${entry.fixture}`, ...entry.args, '--json']);
     assert.ok(r.report, r.stderr);
-    const got = againstGolden(signature(r.report), golden[entry.name].findings, golden[entry.name].exit);
+    noteRecording(r.report);
+    const got = againstGolden(r.report, golden[entry.name].findings, golden[entry.name].exit);
+    // Exact on a dense recording; on a sparse one an expected finding may be an inconclusive row with its fingerprint.
     assert.deepEqual(got.findings, golden[entry.name].findings);
     assert.equal(r.code, got.exit);
-    // An inconclusive row stands in for an expected finding only when the recording really was sparse.
-    assert.deepEqual(denseInconclusive(r.report), [], 'inconclusive although the recorded frames were dense (60 Hz): a stuck gate hides the finding');
-    if (got.inconclusive.length) t.diagnostic(`accepted as inconclusive, the recording was sparse: ${got.inconclusive.join(', ')}`);
+    assert.deepEqual(got.problems, [], 'an inconclusive row breaks the rule of golden.mjs');
+    // A pure CSS transition at 60 Hz gives no row at all, of any kind.
+    if (CLEAN.has(entry.name) && reportDense(r.report)) assert.deepEqual(r.report.findings.filter((f) => f.kind === 'inconclusive'), []);
+    if (got.standIns.length) t.diagnostic(`on a sparse recording an inconclusive row stands in for: ${got.standIns.join(', ')}`);
+    if (got.extras.length) t.diagnostic(`on a sparse recording, extra inconclusive rows: ${got.extras.map((f) => f.element).join(', ')}`);
   });
 }
 
@@ -87,7 +97,7 @@ test('--interact never touches the delete button, the drag handle or the slider,
   });
 });
 
-test('an overlay appended to body on open is traced: its animated height is found and its nodes are counted', async () => {
+exact('an overlay appended to body on open is traced: its animated height is found and its nodes are counted', async () => {
   const report = await audit(`${srv.url}/overlay-portal.html`, { click: '#open', out: undefined });
   assert.ok(report.click.mounted > 0, 'mounted nodes were followed');
   assert.ok(report.findings.some((f) => f.kind === 'layout-animated' && f.element === 'click #open'));

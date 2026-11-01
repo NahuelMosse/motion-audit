@@ -1,12 +1,14 @@
-// The "frames too sparse" gates must open only for sparse frames: with 60 Hz data every one of them has to
-// yield the finding (or nothing), never an `inconclusive` row, or a stuck gate would hide the finding.
+// Invariant: a recording whose frames came at 60 Hz (median interval <= 20 ms, none over 34 ms) produces no inconclusive
+// row of either kind, neither "frames too sparse" nor "seen once, not reproduced": on dense frames every gate has to
+// yield the finding or nothing, and a dense flake in a fixture is a real failure to surface (golden.mjs: exact goldens on dense
+// recordings, inconclusive rows tolerated only on sparse ones, and only when the row carries a sparse cadence).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { interruptionJumps, restartUnfollowed } from '../skills/motion-audit/scripts/lib/continuity.mjs';
 import { CLICK_UNSURE_MAX_DT_MS, JUMP_MAX_DT_MS } from '../skills/motion-audit/scripts/lib/constants.mjs';
 import { clickUnsure, recordingCadence } from '../skills/motion-audit/scripts/lib/probes.mjs';
 import { analyzeRecording, analyzeSeries } from '../skills/motion-audit/scripts/lib/series.mjs';
-import { DENSE_MAX_MS, DENSE_MEDIAN_MS, denseInconclusive } from './helpers/golden.mjs';
+import { DENSE_MAX_MS, DENSE_MEDIAN_MS } from './helpers/golden.mjs';
 import { EASINGS, FRAME, irregularTimes, prng, txElement } from './helpers/curves.mjs';
 
 const frames = (n, step = FRAME) => Array.from({ length: n }, (_, i) => i * step);
@@ -78,80 +80,51 @@ test('interrupt gate: at 60 Hz a restart is found as a jump and is never left un
   assert.ok(unfollowed > 0, 'sparse frames do leave the restart unfollowed');
 });
 
-test('an inconclusive row from a 60 Hz recording is a failure; from a sparse one it is not', () => {
-  const row = (element) => ({ kind: 'inconclusive', element, detail: 'x' });
-  const moves = (cadence) => ({ label: 'button "Go"', moments: { hover: { motion: [{ moves: [{ cadence }] }] } } });
+test('the golden rule: dense recordings are exact and allow no inconclusive row; sparse ones tolerate rows that carry a sparse cadence', async () => {
+  const { DENSE_MAX_MS: PRODUCT_MAX, DENSE_MEDIAN_MS: PRODUCT_MEDIAN } = await import('../skills/motion-audit/scripts/lib/constants.mjs');
+  const { isDense } = await import('../skills/motion-audit/scripts/lib/sightings.mjs');
+  const { againstGolden: judge } = await import('./helpers/golden.mjs');
+  assert.deepEqual([DENSE_MEDIAN_MS, DENSE_MAX_MS], [PRODUCT_MEDIAN, PRODUCT_MAX], 'tests and product share one threshold');
+  assert.equal(isDense({ median: 17, max: 34 }), true);
+  assert.equal(isDense({ median: 17, max: 35 }), false);
+  assert.equal(isDense({ median: 21, max: 30 }), false);
+  const finding = { level: 'error', kind: 'jump', id: 'jump:aaaaaaaaaa', element: 'click #go', detail: 'x' };
+  const row = (cadence, id = 'inconclusive:aaaaaaaaaa', element = 'click #go') => ({ level: 'warning', kind: 'inconclusive', id, element, detail: 'x', ...(cadence ? { cadence } : {}) });
   const at = (median, max) => ({ median, max });
-  assert.equal(DENSE_MEDIAN_MS, 20);
-  assert.equal(DENSE_MAX_MS, 34);
-  assert.equal(denseInconclusive({ findings: [row('click #go')], click: { cadence: at(17, 17) }, elements: [] }).length, 1);
-  assert.equal(denseInconclusive({ findings: [row('click #go')], click: { cadence: at(17, 80) }, elements: [] }).length, 0);
-  assert.equal(denseInconclusive({ findings: [row('click #go')], click: { cadence: at(40, 40) }, elements: [] }).length, 0);
-  assert.equal(denseInconclusive({ findings: [row('button "Go"')], elements: [moves(at(17, 20))] }).length, 1);
-  assert.equal(denseInconclusive({ findings: [row('button "Go"')], elements: [moves(at(17, 70))] }).length, 0);
-  assert.equal(denseInconclusive({ findings: [{ kind: 'jump', element: 'click #go' }], click: { cadence: at(17, 17) }, elements: [] }).length, 0);
+  const expected = ['error|jump:aaaaaaaaaa|click #go'];
+  const run = (findings) => judge({ findings }, expected, 1);
+  // exact on a dense recording
+  assert.deepEqual(run([finding]).findings, expected);
+  assert.deepEqual(run([finding]).problems, []);
+  // a row on a dense recording is a problem, whether it stands in for the finding or is extra
+  assert.equal(run([row(at(17, 17))]).problems.length, 1);
+  assert.equal(run([finding, row(at(17, 20), 'inconclusive:bbbbbbbbbb', 'button "Go"')]).problems.length, 1);
+  // a row without the cadence of its recording is a problem
+  assert.equal(run([row(null)]).problems.length, 1);
+  // on a sparse recording the row stands in for the finding, and extra rows are tolerated and set aside
+  const stood = run([row(at(40, 90))]);
+  assert.deepEqual([stood.findings, stood.problems, stood.standIns], [expected, [], expected]);
+  assert.equal(stood.exit, 0);
+  const extra = run([finding, row(at(40, 90), 'inconclusive:bbbbbbbbbb', 'button "Go"')]);
+  assert.deepEqual([extra.findings, extra.problems, extra.extras.length], [expected, [], 1]);
+  // any other difference fails: a lost finding without a row, or a finding that is not expected
+  assert.notDeepEqual(run([]).findings, expected);
+  assert.notDeepEqual(run([finding, { ...finding, id: 'jump:cccccccccc', element: 'other' }]).findings, expected);
 });
 
-// A jump seen in one click recording and not in the re-measures: what it becomes depends on how well each recording could judge.
-test('an unconfirmed jump: dropped when a decidable re-measure ruled it out in a sparse sighting, otherwise inconclusive', async () => {
-  const { unconfirmedVerdict, decidable, sightedDense } = await import('../skills/motion-audit/scripts/lib/probes.mjs');
-  const move = (cadenceMax, extra = {}) => ({ prop: 'translateX', cadence: { median: 17, max: cadenceMax }, jumps: [], unresolved: 0, ...extra });
-  const moved = (m) => [{ label: 'div', moves: [m] }];
-  const none = (decidableRerun) => ({ jumps: [], decidable: decidableRerun });
-  const sparseSighting = { sightedDense: false };
-  const denseSighting = { sightedDense: true };
-  // 1. sparse sighting, one decidable re-measure without the jump: a decided negative, no row
-  assert.equal(unconfirmedVerdict(sparseSighting, [none(false), none(true)]), 'drop');
-  // 2. sparse sighting, every re-measure undecidable: undecided
-  assert.equal(unconfirmedVerdict(sparseSighting, [none(false), none(false)]), 'inconclusive');
-  // 3. clear sighting in dense frames that the re-measures do not reproduce: a flake, undecided
-  assert.equal(unconfirmedVerdict(denseSighting, [none(true), none(true)]), 'inconclusive');
-  // the predicates behind it
-  assert.equal(decidable(moved(move(17))), true);
-  assert.equal(decidable(moved(move(17, { unresolved: 1 }))), false);
-  assert.equal(decidable(moved(move(110))), false);
-  assert.equal(sightedDense(moved(move(20, { jumps: [{ atMs: 1, size: 1 }] }))), true);
-  assert.equal(sightedDense(moved(move(70, { jumps: [{ atMs: 1, size: 1 }] }))), false);
-  assert.equal(sightedDense(moved(move(20))), false);
-});
-
-// Every place a sighting of an interrupt jump can be discarded (the re-measures disagree, the frames cannot follow a restart)
-// ends in a row with the finding's fingerprint, unless a decidable re-measure ruled it out.
-test('interrupt sightings: undecided rows keep the fingerprint of the finding; a decided negative drops it', async () => {
-  const { markCadence } = await import('../skills/motion-audit/scripts/lib/continuity.mjs');
-  const { judgeElement } = await import('../skills/motion-audit/scripts/lib/judge.mjs');
-  const { fingerprint } = await import('../skills/motion-audit/scripts/lib/config.mjs');
-  // markCadence: 60 Hz is dense, a stall is not
-  const dense = { marks: [200], elems: [txElement(frames(30), frames(30).map(() => 0))], anims: [] };
-  assert.ok(markCadence(dense, 200).max <= DENSE_MAX_MS);
-  const stalled = { marks: [200], elems: [txElement([0, 50, 100, 250, 400, 450], [0, 0, 0, 0, 0, 0])], anims: [] };
-  assert.ok(markCadence(stalled, 250).max > DENSE_MAX_MS);
-  // an element whose hover-interrupt sighting was not confirmed and could not be ruled out
-  const el = { label: 'button "Card"', kind: 'button', selected: false, transition: { properties: [], durations: [], easings: [] }, moments: {}, long: [], undecided: [{ check: 'interrupt-jump', key: 'hover', detail: 'hover left mid-way: a jump was seen in one recording and not in the re-measures', cadence: { median: 17, max: 90 } }] };
-  const rows = judgeElement(el);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].kind, 'inconclusive');
-  const finding = { kind: 'interrupt-jump', element: 'button "Card"', key: 'hover' };
-  assert.equal(fingerprint(rows[0]).split(':')[1], fingerprint(finding).split(':')[1]);
-});
-
-test('a hover interrupt or element jump dropped by the majority vote becomes an undecided row unless a decidable re-measure ruled it out', async () => {
-  const { undecidedOf } = await import('../skills/motion-audit/scripts/lib/audit.mjs');
-  const rerun = (decidableRerun) => ({ interrupt: [], interruptUnsure: decidableRerun ? null : { median: 40, max: 120 }, moments: { hover: { motion: [{ label: 'div', moves: [{ prop: 'translateX', jumps: [], unresolved: decidableRerun ? 0 : 1, cadence: { median: 17, max: decidableRerun ? 17 : 120 } }] }] } } });
-  const interrupt = (dense) => ({ unconfirmed: ['interrupt'], interruptDense: dense, interruptCadence: { median: 17, max: 60 } });
-  const kinds = (el, later) => undecidedOf(el, later).map((u) => `${u.check} ${u.key}`);
-  // clear sighting in dense frames, not reproduced by decidable re-measures: a flake, undecided
-  assert.deepEqual(kinds(interrupt(true), [rerun(true), rerun(true)]), ['interrupt-jump hover']);
-  // sparse sighting, one decidable re-measure without it: decided negative, no row
-  assert.deepEqual(kinds(interrupt(false), [rerun(false), rerun(true)]), []);
-  // sparse sighting, no re-measure could judge: undecided
-  assert.deepEqual(kinds(interrupt(false), [rerun(false), rerun(false)]), ['interrupt-jump hover']);
-  // jumps of a gesture's motions follow the same rule, one row per sighting
-  const jumped = (max, scripted = true) => ({ unconfirmed: ['jump'], moments: { hover: { motion: [{ label: 'div', scripted, moves: [{ prop: 'left', jumps: [{ atMs: 1, size: 9 }], cadence: { median: 17, max } }] }] } } });
-  assert.deepEqual(kinds(jumped(17), [rerun(true), rerun(true)]), ['jump hover div left']);
-  assert.deepEqual(kinds(jumped(90), [rerun(false), rerun(true)]), []);
-  assert.deepEqual(kinds(jumped(90), [rerun(false), rerun(false)]), ['jump hover div left']);
-  // a CSS transition or animation cannot teleport: its sighting is never left undecided
-  assert.deepEqual(kinds(jumped(90, false), [rerun(false), rerun(false)]), []);
-  assert.deepEqual(kinds(jumped(17, false), [rerun(true), rerun(true)]), []);
+test('with MOTION_REQUIRE_DENSE no inconclusive row is tolerated and a run without a dense recording fails', async () => {
+  process.env.MOTION_REQUIRE_DENSE = '1';
+  try {
+    const strict = await import('./helpers/golden.mjs?require-dense');
+    const sparseRow = { level: 'warning', kind: 'inconclusive', id: 'inconclusive:aaaaaaaaaa', element: 'click #go', detail: 'x', cadence: { median: 40, max: 90 } };
+    assert.equal(strict.REQUIRE_DENSE, true);
+    assert.equal(strict.againstGolden({ findings: [sparseRow] }, ['error|jump:aaaaaaaaaa|click #go'], 1).problems.length, 1);
+    const report = (cadence) => ({ findings: [], click: { cadence }, elements: [] });
+    strict.noteRecording(report({ median: 40, max: 90 }));
+    assert.equal(strict.requireSomeDense().length, 1, 'no dense recording yet');
+    strict.noteRecording(report({ median: 17, max: 20 }));
+    assert.deepEqual(strict.requireSomeDense(), []);
+  } finally {
+    delete process.env.MOTION_REQUIRE_DENSE;
+  }
 });

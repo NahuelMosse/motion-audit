@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pure CSS transitions of left, transform and opacity, all ease-out</title>
+<style>
+  :root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; color: #1c1c1c; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms var(--ease-out), transform 120ms var(--ease-out); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  .lane { position: relative; height: 140px; margin-top: 24px; }
+  .box { position: absolute; top: 0; width: 40px; height: 40px; background: #2a5bd7; transition: left 400ms var(--ease-out); left: 0; }
+  .tilt { position: absolute; top: 50px; width: 40px; height: 40px; background: #2a5bd7; transition: transform 400ms var(--ease-out); transform: translateX(0); }
+  .fade { position: absolute; top: 100px; width: 40px; height: 40px; background: #2a5bd7; transition: opacity 400ms var(--ease-out); opacity: 0.2; }
+  .on .box { left: 200px; }
+  .on .tilt { transform: translateX(200px); }
+  .on .fade { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .box, .tilt, .fade { transition: none; } button:active { transform: none; } }
+</style>
+</head>
+<body>
+<button id="go" type="button">Slide</button>
+<div class="lane" id="lane">
+  <div class="box"></div>
+  <div class="tilt"></div>
+  <div class="fade"></div>
+</div>
+<script>
+  document.getElementById('go').addEventListener('click', () => document.getElementById('lane').classList.toggle('on'));
+</script>
+</body>
+</html>
