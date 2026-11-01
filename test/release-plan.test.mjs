@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PACK_ARGS, PlanError, planRelease, tagTarget } from '../.github/scripts/release-plan.mjs';
+import { PACK_ARGS, PlanError, packShasumAt, planRelease, tagTarget } from '../.github/scripts/release-plan.mjs';
 
 const sha = 'a'.repeat(40);
 const gitHead = 'b'.repeat(40);
@@ -118,6 +118,35 @@ test('every npm pack of the release runs no scripts', () => {
   assert.ok(PACK_ARGS.includes('--ignore-scripts') && PACK_ARGS.includes('--dry-run') && PACK_ARGS.includes('--json'));
 });
 
+// packShasumAt with git and the spawn spied on: npm runs with PACK_ARGS in a worktree of the commit, and the worktree is removed.
+test('packShasumAt packs a detached worktree of the commit with PACK_ARGS and removes it', () => {
+  const gits = [];
+  const runs = [];
+  const git = (args) => { gits.push(args); return ''; };
+  const run = (file, args, options) => { runs.push({ file, args, cwd: options.cwd }); return JSON.stringify([{ shasum }]); };
+  assert.equal(packShasumAt(gitHead, { git, run }), shasum);
+  assert.equal(runs.length, 1);
+  assert.match(runs[0].file, /^npm(.cmd)?$/);
+  assert.deepEqual(runs[0].args, PACK_ARGS);
+  assert.ok(runs[0].args.includes('--ignore-scripts'));
+  assert.deepEqual(gits.map((args) => args.slice(0, 2)), [['worktree', 'add'], ['worktree', 'remove']]);
+  assert.deepEqual(gits[0].slice(2, 3).concat(gits[0].at(-1)), ['--detach', gitHead]);
+  assert.equal(runs[0].cwd, gits[0].at(-2), 'npm runs in the worktree that was added');
+  assert.equal(gits[1].at(-1), runs[0].cwd, 'and that worktree is removed');
+});
+
+test('packShasumAt gives null when the worktree cannot be added, when npm fails or prints no shasum, and still removes the worktree', () => {
+  const ok = () => JSON.stringify([{ shasum }]);
+  let removed = 0;
+  const git = (fail) => (args) => { if (args[1] === 'remove') removed++; return args[1] === 'add' && fail ? null : ''; };
+  assert.equal(packShasumAt(gitHead, { git: git(true), run: () => { throw new Error('must not run'); } }), null);
+  assert.equal(packShasumAt(gitHead, { git: git(false), run: () => { throw new Error('npm failed'); } }), null);
+  assert.equal(packShasumAt(gitHead, { git: git(false), run: () => '[]' }), null);
+  assert.equal(packShasumAt(gitHead, { git: git(false), run: () => 'not json' }), null);
+  assert.equal(packShasumAt(gitHead, { git: git(false), run: ok }), shasum);
+  assert.equal(removed, 5);
+});
+
 // The workflow: the test job makes the plan and runs the tests whatever the mode; the privileged job needs it, reads only its outputs
 // and does exactly what each step's condition says.
 const workflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
@@ -130,6 +159,8 @@ const stepWith = (job, text) => {
   assert.equal(found.length, 1, `one step with ${text}`);
   return found[0];
 };
+// A step has a line, whole: `if: … == 'publish' || true` is not the line `if: … == 'publish'`.
+const hasLine = (step, line) => step.split('\n').some((l) => l.trim() === line);
 const NOT_NONE = "if: steps.plan.outputs.mode != 'none'";
 
 test('the release test job exposes the plan as outputs, has no condition of its own and runs install, browser and tests unless the mode is none', () => {
@@ -138,8 +169,8 @@ test('the release test job exposes the plan as outputs, has no condition of its 
   assert.doesNotMatch(header, /\n    if:/);
   assert.doesNotMatch(header, /\n    needs:/);
   assert.match(stepWith(testJob, 'release-plan.mjs'), /id: plan/);
-  assert.ok(!stepWith(testJob, 'release-plan.mjs').includes('if:'), 'the plan always runs');
-  for (const text of ['npm ci', 'playwright install', 'npm run test:unit']) assert.ok(stepWith(testJob, text).includes(NOT_NONE), `${text} runs unless the mode is none`);
+  assert.ok(!stepWith(testJob, 'release-plan.mjs').split('\n').some((l) => l.trim().startsWith('if:')), 'the plan always runs');
+  for (const text of ['npm ci', 'playwright install', 'npm run test:unit']) assert.ok(hasLine(stepWith(testJob, text), NOT_NONE), `${text} runs unless the mode is none`);
   assert.ok(stepWith(testJob, 'npm run test:unit').includes('test/package-install.test.mjs'));
   assert.ok(!/mode == 'pack'|mode == 'publish'/.test(testJob), 'the tests are not limited to one mode');
 });
@@ -150,14 +181,14 @@ test('the release publish job needs the test job, reads only its outputs, and ea
   assert.doesNotMatch(publishJob, /release-plan\.mjs/, 'publish does not recompute the plan');
   assert.doesNotMatch(publishJob, /steps\.plan\./, 'publish reads no plan of its own');
   const publish = stepWith(publishJob, 'npm publish');
-  assert.ok(publish.includes("if: needs.test.outputs.mode == 'publish'") && publish.includes('needs.test.outputs.dist-tag'));
+  assert.ok(hasLine(publish, "if: needs.test.outputs.mode == 'publish'") && publish.includes('needs.test.outputs.dist-tag'));
   const pack = stepWith(publishJob, 'npm pack');
-  assert.ok(pack.includes("if: needs.test.outputs.mode == 'pack'"));
+  assert.ok(hasLine(pack, "if: needs.test.outputs.mode == 'pack'"));
   const upgrade = stepWith(publishJob, 'npm install --global npm@11.21.1');
-  assert.ok(upgrade.includes("if: needs.test.outputs.mode == 'publish'"), 'the npm version is pinned, not the one bundled with Node');
+  assert.ok(hasLine(upgrade, "if: needs.test.outputs.mode == 'publish'"), 'the npm version is pinned, not the one bundled with Node');
   // the tag step depends on the plan's tag-sha only: a hand-published version is tagged without a publish of this run
   const tag = stepWith(publishJob, 'git tag');
-  assert.ok(tag.includes("if: needs.test.outputs.tag-sha != ''") && !/mode/.test(tag.slice(0, tag.indexOf('run:'))));
+  assert.ok(hasLine(tag, "if: needs.test.outputs.tag-sha != ''") && !/mode/.test(tag.slice(0, tag.indexOf('run:'))));
   assert.ok(tag.includes('needs.test.outputs.version') && tag.includes('needs.test.outputs.tag-sha'));
 });
 

@@ -261,11 +261,14 @@ test('every gesture of every audited control, focus included, reports the cadenc
   const report = await audit(`${srv.url}/shadcn.html`, {});
   const moments = report.elements.flatMap((e) => Object.entries(e.moments));
   assert.ok(moments.some(([name]) => name === 'focus') && moments.some(([name]) => name === 'hover'));
-  // A cadence is an interval between two frames: a gesture whose recording holds fewer than two frames (a press with no :active
-  // feedback, an instant change) has none, and then nothing in it was sampled more than once.
+  // A cadence is an interval between two frames. Hover and focus of these controls always animate something, so they always carry one;
+  // only a press can lack it: shadcn.html has no :active style, so a forced press changes nothing and records fewer than two frames.
   for (const [name, m] of moments) {
     if (m.cadence) assert.ok(m.cadence.max >= m.cadence.median, `${name}: ${JSON.stringify(m.cadence)}`);
-    else assert.ok(m.motion.every((e) => e.moves.every((mv) => mv.samples < 2)), `${name}: no cadence but motion ${JSON.stringify(m.motion)}`);
+    else {
+      assert.equal(name, 'press', `${name} carries no cadence`);
+      assert.ok(m.motion.every((e) => e.moves.every((mv) => mv.samples < 2)), `press: no cadence but motion ${JSON.stringify(m.motion)}`);
+    }
   }
 });
 

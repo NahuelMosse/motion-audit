@@ -125,16 +125,16 @@ function commitInRepo(sha) {
 }
 
 // The shasum `npm pack --dry-run --json` reports for the tree at `sha` (no scripts run), null when it cannot be packed.
-function packShasumAt(sha) {
+export function packShasumAt(sha, { git: runGit = git, run = execFileSync } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'release-pack-'));
   try {
-    if (git(['worktree', 'add', '--detach', dir, sha]) === null) return null;
-    const out = execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', PACK_ARGS, { cwd: dir, encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'ignore'] });
+    if (runGit(['worktree', 'add', '--detach', dir, sha]) === null) return null;
+    const out = run(process.platform === 'win32' ? 'npm.cmd' : 'npm', PACK_ARGS, { cwd: dir, encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'ignore'] });
     return JSON.parse(out)[0]?.shasum ?? null;
   } catch {
     return null;
   } finally {
-    git(['worktree', 'remove', '--force', dir]);
+    runGit(['worktree', 'remove', '--force', dir]);
     rmSync(dir, { recursive: true, force: true });
   }
 }
