@@ -1,10 +1,10 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
-import { ROOT, runCli } from './helpers/cli.mjs';
+import { ROOT, removeScratch, runCli } from './helpers/cli.mjs';
 import { npm } from './helpers/npm.mjs';
 
 const read = (...p) => readFileSync(join(ROOT, ...p), 'utf8');
@@ -51,7 +51,9 @@ test('the tracked files at the repository root are all on the list of expected o
 
 const json = (...p) => JSON.parse(readFileSync(join(ROOT, ...p), 'utf8'));
 const SKILL = join(ROOT, 'skills', 'motion-audit');
-const tempDir = () => mkdtempSync(join(tmpdir(), 'ma-pkg-'));
+const made = [];
+const tempDir = () => { const dir = mkdtempSync(join(tmpdir(), 'ma-pkg-')); made.push(dir); return dir; };
+after(() => { for (const dir of made) rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); removeScratch(); });
 
 test('package.json is publishable, points inside the skill directory and matches the plugin manifest', () => {
   assert.equal(pkg.name, 'motion-audit');
@@ -73,7 +75,6 @@ test('the tarball holds exactly the expected files, and no fixture', async () =>
   const files = packed.files.map((f) => f.path).sort();
   assert.deepEqual(files, json('test', 'expected-package-files.json'));
   assert.ok(!files.some((f) => f.includes('fixtures') || f.startsWith('test/')));
-  rmSync(dest, { recursive: true, force: true, maxRetries: 5 });
 });
 
 const sourceFiles = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? sourceFiles(join(dir, e.name)) : e.name.endsWith('.mjs') ? [join(dir, e.name)] : []);
@@ -103,5 +104,4 @@ test('the skill directory alone is self-contained: it runs and every import stay
     }
   }
   assert.ok(checked > 20, `found only ${checked} imports: the pattern no longer matches the sources`);
-  rmSync(parent, { recursive: true, force: true, maxRetries: 5 });
 });
