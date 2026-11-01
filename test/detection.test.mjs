@@ -214,6 +214,7 @@ test('the real tracer records the root and its label, frame times, animation eve
   const { frameCadence } = await import('../skills/motion-audit/scripts/lib/probes.mjs');
   const { analyzeRecording } = await import('../skills/motion-audit/scripts/lib/series.mjs');
   const { judgeElement } = await import('../skills/motion-audit/scripts/lib/judge.mjs');
+  const { isDense } = await import('../skills/motion-audit/scripts/lib/sightings.mjs');
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
   try {
@@ -245,10 +246,34 @@ test('the real tracer records the root and its label, frame times, animation eve
     const transition = (easing) => ({ properties: ['left'], durations: [400], easings: [easing] });
     const gesture = (easing) => ({ label: 'div.box', kind: 'div', selected: false, transition: transition(easing), long: [], moments: { press: { changed: ['left'], pixels: true, rootLabel: rootElem.label, cadence, motion, transition: transition(easing) } } });
     assert.deepEqual(judgeElement(gesture('cubic-bezier(0.23, 1, 0.32, 1)')).filter((f) => f.kind === 'inconclusive' || f.kind === 'ease-in'), []);
-    // a declared ease-in is measured in the same recording: an ease-in finding or, if this machine's frames were sparse, a row with a sparse cadence
-    const eased = judgeElement(gesture('ease-in')).filter((f) => f.key === 'measured div.box' || f.key === 'declared left');
-    assert.ok(eased.some((f) => f.key === 'declared left'));
+    // a declared ease-in is measured in the same recording, whose real curve is an ease-out: on dense frames the fit rules the measured
+    // ease-in out (no row of any kind for it); on sparse ones the row stands in for it with that recording's sparse cadence
+    const measured = judgeElement(gesture('ease-in')).filter((f) => f.key === 'measured div.box');
+    if (isDense(cadence)) assert.deepEqual(measured, []);
+    else for (const f of measured) assert.ok(f.kind === 'inconclusive' && f.check === 'ease-in' && !isDense(f.cadence), JSON.stringify(f));
+    assert.ok(judgeElement(gesture('ease-in')).some((f) => f.key === 'declared left'), 'the declared curve itself is a finding');
   } finally {
     await context.close();
+  }
+});
+
+test('every gesture of every audited control, focus included, reports the cadence of its own recording', async () => {
+  const report = await audit(`${srv.url}/shadcn.html`, {});
+  const moments = report.elements.flatMap((e) => Object.entries(e.moments));
+  assert.ok(moments.some(([name]) => name === 'focus') && moments.some(([name]) => name === 'hover'));
+  for (const [name, m] of moments) assert.ok(m.cadence && m.cadence.max >= m.cadence.median, `${name}: ${JSON.stringify(m.cadence)}`);
+});
+
+// A CSS keyframe teleport (49.99% to 50%): Chromium samples the step in one interval or spreads it over two. On a dense run it is a jump
+// finding every time; on a sparse one an undecided row with a sparse cadence; never nothing.
+test('a hard keyframe teleport is a jump on every dense run and at least an undecided row on a sparse one', async () => {
+  const { isDense } = await import('../skills/motion-audit/scripts/lib/sightings.mjs');
+  for (let run = 1; run <= 6; run++) {
+    const report = await audit(`${srv.url}/keyframes-hard.html`, { click: '#go' });
+    const jump = report.findings.find((f) => f.kind === 'jump' && f.element === 'click #go');
+    const unsure = report.findings.find((f) => f.kind === 'inconclusive' && f.check === 'jump' && f.element === 'click #go');
+    assert.ok(jump || unsure, `run ${run}: nothing at all: ${JSON.stringify(report.findings.map((f) => [f.kind, f.element]))}`);
+    if (!jump) assert.equal(isDense(unsure.cadence), false, `run ${run}: an undecided row on a dense recording`);
+    if (isDense(report.click.cadence)) assert.ok(jump, `run ${run}: dense frames (${JSON.stringify(report.click.cadence)}) and no jump`);
   }
 });

@@ -74,7 +74,10 @@ export const judgeElement = (el, policy = {}) => {
       const label = d.rootLabel ?? root?.label;
       const mine = (root?.moves ?? []).filter((m) => wanted.has(m.prop));
       const fitted = (m) => m.samples >= SIGHTING_MIN_SAMPLES && m.samples / (m.durationMs / FRAME_MS) >= SPARSE_DENSITY && !m.easeInTie;
-      if (label && !isDense(d.cadence) && !mine.some((m) => (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) || fitted(m))) {
+      if (label && mine.length && isDense(d.cadence) && !mine.some((m) => (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) || fitted(m))) {
+        // Dense frames and a fit that cannot tell the curve from an ease-in: the declared curve decides, so it is the finding.
+        if (mine.some((m) => m.easeInTie && m.durationMs > EASE_IN_MIN_MS)) add('ease-in', `${moment}: ${label} measured ease-in (the fit ties with it and the stylesheet declares it)`, `measured ${label}`);
+      } else if (label && !isDense(d.cadence) && !mine.some((m) => (m.shape === 'ease-in' && m.durationMs > EASE_IN_MIN_MS) || fitted(m))) {
         const worst = mine.map((m) => m.cadence).sort((x, y) => y.max - x.max)[0];
         if (worst) unsure('ease-in', `${moment}: ${label} is declared to ease in, the measured curve cannot confirm it`, `measured ${label}`, worst);
         else add('inconclusive', `${moment}: ${label} is declared to ease in and its motion was not recorded with enough samples to fit a curve`, `ease-in measured ${label}`, undefined, { check: 'ease-in', key: `measured ${label}`, cadence: d.cadence });

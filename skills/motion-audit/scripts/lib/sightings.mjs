@@ -40,17 +40,19 @@ export const canSee = (coverage, sighting, { mark = false } = {}) => {
 
 export const isDense = (cadence) => Boolean(cadence) && cadence.median <= DENSE_MEDIAN_MS && cadence.max <= DENSE_MAX_MS;
 
-// 'drop': every sighting was ruled out by a re-measure that could see it. Otherwise why one stays undecided:
-// 'flake' (a clear step in frame-by-frame sampling that the re-measures did not reproduce) or 'unseen' (no re-measure
-// could judge that motion). `sightings`: [{ label, prop, moment?, dense }]; `reruns`: [{ saw: [{ label, prop, moment? }], coverage }].
+// The sightings a re-measure did not rule out, each with why: 'flake' (a clear step in frame-by-frame sampling that the
+// re-measures did not reproduce) or 'unseen' (no re-measure could judge that motion). `sightings`: [{ label, prop, moment?, dense,
+// cadence? }] (the cadence is that of the intervals around the sighting); `reruns`: [{ saw: [{ label, prop, moment? }], coverage }].
+export const undecidedSightings = (sightings, reruns, opts = {}) => sightings.flatMap((s) => {
+  if (s.dense) return [{ sighting: s, cause: 'flake' }];
+  const ruledOut = reruns.some((r) => !(r.saw ?? []).some((x) => sameMotion(x, s)) && canSee(r.coverage, s, opts));
+  return ruledOut ? [] : [{ sighting: s, cause: 'unseen' }];
+});
+
+// 'drop' when every sighting was ruled out; otherwise the cause of the first that was not ('flake' before 'unseen').
 export const unconfirmedVerdict = (sightings, reruns, opts = {}) => {
-  let verdict = 'drop';
-  for (const s of sightings) {
-    if (s.dense) return 'flake';
-    const ruledOut = reruns.some((r) => !(r.saw ?? []).some((x) => sameMotion(x, s)) && canSee(r.coverage, s, opts));
-    if (!ruledOut) verdict = 'unseen';
-  }
-  return verdict;
+  const left = undecidedSightings(sightings, reruns, opts);
+  return left.find((x) => x.cause === 'flake')?.cause ?? left[0]?.cause ?? 'drop';
 };
 
 // The reason an undecided row gives, by cause.

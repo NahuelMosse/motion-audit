@@ -247,5 +247,11 @@
   "css-transitions": {
     "exit": 0,
     "findings": []
+  },
+  "keyframes-hard": {
+    "exit": 1,
+    "findings": [
+      "error|jump:810b7e3b29|click #go"
+    ]
   }
 }

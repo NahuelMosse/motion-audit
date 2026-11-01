@@ -5,10 +5,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { interruptionJumps, restartUnfollowed } from '../skills/motion-audit/scripts/lib/continuity.mjs';
-import { CLICK_UNSURE_MAX_DT_MS, JUMP_MAX_DT_MS } from '../skills/motion-audit/scripts/lib/constants.mjs';
+import { DENSE_MAX_MS, JUMP_MAX_DT_MS } from '../skills/motion-audit/scripts/lib/constants.mjs';
 import { clickUnsure, recordingCadence } from '../skills/motion-audit/scripts/lib/probes.mjs';
 import { analyzeRecording, analyzeSeries } from '../skills/motion-audit/scripts/lib/series.mjs';
-import { DENSE_MAX_MS, DENSE_MEDIAN_MS } from './helpers/golden.mjs';
 import { EASINGS, FRAME, irregularTimes, prng, txElement } from './helpers/curves.mjs';
 
 const frames = (n, step = FRAME) => Array.from({ length: n }, (_, i) => i * step);
@@ -36,7 +35,10 @@ test('click gate: 60 Hz recordings of a script-driven step give no inconclusive 
   assert.equal(clickUnsure(dense, recOf(t, [])), null);
   const wide = t.map((x) => x * 5);
   const sparse = analyzeRecording(recOf(wide, stepSeries(t).map((x) => x * 2)));
-  assert.ok(clickUnsure(sparse, recOf(wide, []))?.max > CLICK_UNSURE_MAX_DT_MS);
+  assert.ok(clickUnsure(sparse, recOf(wide, []))?.max > DENSE_MAX_MS);
+  // frames 40 ms apart (a 25 fps recording) are not dense either: an unresolved step there is undecided, never silent
+  const mid = t.map((x) => x * 2.4);
+  assert.ok(clickUnsure(analyzeRecording(recOf(mid, stepSeries(t).map((x) => x * 2))), recOf(mid, []))?.max > DENSE_MAX_MS);
 });
 
 test('click gate: a script-driven teleport sampled at 60 Hz is a jump, so no inconclusive row follows', () => {
@@ -83,8 +85,10 @@ test('interrupt gate: at 60 Hz a restart is found as a jump and is never left un
 test('the golden rule: dense recordings are exact and allow no inconclusive row; sparse ones tolerate rows that carry a sparse cadence', async () => {
   const { DENSE_MAX_MS: PRODUCT_MAX, DENSE_MEDIAN_MS: PRODUCT_MEDIAN } = await import('../skills/motion-audit/scripts/lib/constants.mjs');
   const { isDense } = await import('../skills/motion-audit/scripts/lib/sightings.mjs');
-  const { againstGolden: judge } = await import('./helpers/golden.mjs');
-  assert.deepEqual([DENSE_MEDIAN_MS, DENSE_MAX_MS], [PRODUCT_MEDIAN, PRODUCT_MAX], 'tests and product share one threshold');
+  const { againstGolden: judge, isDenseCadence } = await import('./helpers/golden.mjs');
+  // what the golden rule calls dense is what the product calls dense (the same function, at the same boundaries)
+  assert.equal(isDenseCadence, isDense);
+  for (const c of [{ median: PRODUCT_MEDIAN, max: PRODUCT_MAX }, { median: PRODUCT_MEDIAN + 1, max: PRODUCT_MAX }, { median: PRODUCT_MEDIAN, max: PRODUCT_MAX + 1 }]) assert.equal(isDenseCadence(c), isDense(c));
   assert.equal(isDense({ median: 17, max: 34 }), true);
   assert.equal(isDense({ median: 17, max: 35 }), false);
   assert.equal(isDense({ median: 21, max: 30 }), false);

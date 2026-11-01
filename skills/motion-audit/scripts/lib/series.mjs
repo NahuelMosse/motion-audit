@@ -78,7 +78,24 @@ const findJumps = (t, v, start, settle, amp, t0, shape, reads = t) => {
     const read = reads[k] - reads[k - 1];
     return dt > 0 && dt <= SERIES_JUMP_MAX_DT_MS && read <= SERIES_JUMP_MAX_DT_MS ? Math.abs(v[k] - v[k - 1]) / dt : null;
   };
+  const fast = (k) => { const x = velocity(k); return x !== null && x >= peak * avgVelocity; };
   for (let k = start + 1; k <= settle; k++) {
+    // Chromium can sample a frame in the middle of a teleport: the step spreads over consecutive intervals that are each
+    // faster than any curve peaks. They are one jump, compared with the intervals on both sides of the run.
+    if (k < settle && fast(k) && fast(k + 1)) {
+      let end = k + 1;
+      while (end < settle && fast(end + 1)) end++;
+      const total = Math.abs(v[end] - v[k - 1]);
+      if (total >= JUMP_MIN_SHARE * amp) {
+        const before = velocity(k - 1);
+        const after = velocity(end + 1);
+        const run = total / (t[end] - t[k - 1]);
+        if (before === null || after === null) unresolved++;
+        else if (run >= SERIES_NEIGHBOUR_RATIO * before && run >= SERIES_NEIGHBOUR_RATIO * after) jumps.push({ atMs: round(t[k] - t0, 0), size: round(total, 2) });
+      }
+      k = end;
+      continue;
+    }
     const step = Math.abs(v[k] - v[k - 1]);
     if (step < JUMP_MIN_SHARE * amp) continue;
     const vel = velocity(k);
@@ -119,12 +136,22 @@ const legJumps = (t, v, eps, t0, reads = t) => {
 
 // Steps where one node was replaced by another (`cuts`: indices of the first sample of the new node):
 // a node removed while still moving and a new one that starts elsewhere is a teleport.
-const cutJumps = (t, v, cuts, eps, range, t0) => cuts.flatMap((c) => {
-  if (c < 2 || c >= v.length) return [];
-  const step = Math.abs(v[c] - v[c - 1]);
-  const moving = Math.abs(v[c - 1] - v[c - 2]) > eps;
-  return moving && step >= Math.max(JUMP_MIN_SHARE * range, 3 * eps) ? [{ atMs: round(t[c] - t0, 0), size: round(step, 2) }] : [];
-});
+// A join is a jump only if the interval across it and both the intervals beside it were judged: within the limit by frame time and
+// by the time the values were read. A longer interval (a motion that continues across a 300 ms gap) leaves it unresolved.
+const cutJumps = (t, v, cuts, eps, range, t0, reads = t) => {
+  const jumps = [];
+  let unresolved = 0;
+  const judged = (k) => k >= 1 && k < t.length && t[k] - t[k - 1] <= SERIES_JUMP_MAX_DT_MS && reads[k] - reads[k - 1] <= SERIES_JUMP_MAX_DT_MS;
+  for (const c of cuts) {
+    if (c < 2 || c >= v.length) continue;
+    const step = Math.abs(v[c] - v[c - 1]);
+    const moving = Math.abs(v[c - 1] - v[c - 2]) > eps;
+    if (!(moving && step >= Math.max(JUMP_MIN_SHARE * range, 3 * eps))) continue;
+    if (![c - 1, c, c + 1].every(judged)) { unresolved++; continue; }
+    jumps.push({ atMs: round(t[c] - t0, 0), size: round(step, 2) });
+  }
+  return { jumps, unresolved };
+};
 
 // One property over time (`t` ms, `v` values): duration, overshoot, curve shape and jumps.
 // Median and longest interval (ms) between samples.
@@ -167,11 +194,14 @@ export const analyzeSeries = (t, v, eps, cuts = [], longFrames = [], reads = t) 
   if (cuts.length) {
     // Joined nodes are separate motions: each is judged on its own, the joins by cutJumps.
     const bounds = [0, ...cuts, n];
-    jumps = bounds.slice(1).flatMap((end, i) => {
+    const legs = bounds.slice(1).flatMap((end, i) => {
       const leg = analyzeSeries(t.slice(bounds[i], end), v.slice(bounds[i], end), eps, [], [], reads.slice(bounds[i], end));
       unresolved += leg?.unresolved ?? 0;
       return (leg?.jumps ?? []).map((j) => ({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size }));
-    }).concat(cutJumps(t, v, cuts, eps, range, t0));
+    });
+    const joins = cutJumps(t, v, cuts, eps, range, t0, reads);
+    unresolved += joins.unresolved;
+    jumps = legs.concat(joins.jumps);
   } else ({ jumps, unresolved } = shape === 'round-trip' ? legJumps(t, v, eps, t0, reads) : findJumps(t, v, start, settle, amp, t0, shape, reads));
   // A step in a frame that overlaps a long frame is that frame: the animation's clock ran on while the thread was blocked.
   if (longFrames.length) {

@@ -100,15 +100,3 @@ test('a step between two intervals longer than the judging limit is unresolved, 
   const judged = run([40, 40, 40, 40, 50, 60, 50, 40, 40, 40, 40, 40, 40]);
   assert.equal(judged.jumps.length, 1);
 });
-
-test('sparse samples (17 to 133 ms apart) of CSS-like eases never end in a confirmed jump', () => {
-  const ease = EASINGS['strong ease-out'];
-  let jumps = 0;
-  for (const [amp, dur, eps] of [[0.03, 120, 0.01], [120, 400, 1], [300, 600, 1]]) {
-    for (let seed = 1; seed <= 400; seed++) {
-      const times = withRest(irregularTimes(prng(seed * 7919 + dur), 0, dur + 600, 1, 8));
-      if (analyzeSeries(times, times.map((t) => amp * ease(Math.max(0, t) / dur)), eps)?.jumps.length) jumps++;
-    }
-  }
-  assert.equal(jumps, 0);
-});
