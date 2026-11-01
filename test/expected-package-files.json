@@ -22,5 +22,7 @@
   "skills/motion-audit/scripts/lib/probes.mjs",
   "skills/motion-audit/scripts/lib/reduced.mjs",
   "skills/motion-audit/scripts/lib/series.mjs",
+  "skills/motion-audit/scripts/lib/sightings.mjs",
+  "skills/motion-audit/scripts/lib/undecided.mjs",
   "skills/motion-audit/scripts/motion-audit.mjs"
 ]
