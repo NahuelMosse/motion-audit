@@ -71,3 +71,44 @@ test('easingKind recognises declared curves', () => {
 test('unwrap makes a spinning angle continuous', () => {
   assert.deepEqual(unwrap([170, -170, -150]), [170, 190, 210]);
 });
+
+// A step becomes a jump only if it was judged in an interval within the jump-judging limit, by frame time and by the time its
+// value was read, with both neighbours as short: otherwise it can only leave the motion unresolved.
+test('a value read long after its frame started (a long task in between) is not a jump', () => {
+  const frames = withRest(Array.from({ length: 50 }, (_, i) => i * FRAME));
+  // the frame timestamps are 60 Hz, but from the 12th frame on every value was read 130 ms later than it should have been
+  const reads = frames.map((t, i) => t + (i > 14 ? 130 : 0));
+  const v = reads.map((r) => 300 * Math.min(1, Math.max(0, r) / 600));
+  const viaFrames = analyzeSeries(frames, v, 1);
+  assert.ok(viaFrames.jumps.length > 0, 'judged by the frame times alone the stall looks like a teleport');
+  const judged = analyzeSeries(frames, v, 1, [], [], reads);
+  assert.deepEqual(judged.jumps, []);
+  assert.ok(judged.unresolved > 0);
+});
+
+test('a step between two intervals longer than the judging limit is unresolved, however sharp; with judged neighbours it is a jump', () => {
+  const at = (dts) => dts.reduce((acc, dt) => [...acc, acc.at(-1) + dt], [0]);
+  const run = (dts) => {
+    const times = [-2 * FRAME, -FRAME, ...at(dts)];
+    const step = dts.findIndex((d, i) => d === 60 && i > 3);
+    const v = times.map((_, i) => { const k = i - 2; return k < 0 ? 0 : k <= step ? 6 * k : 6 * k + 150; });
+    return analyzeSeries(times, v, 1);
+  };
+  const sparse = run([40, 40, 40, 40, 120, 60, 120, 40, 40, 40, 40, 40, 40]);
+  assert.deepEqual(sparse.jumps, []);
+  assert.ok(sparse.unresolved > 0);
+  const judged = run([40, 40, 40, 40, 50, 60, 50, 40, 40, 40, 40, 40, 40]);
+  assert.equal(judged.jumps.length, 1);
+});
+
+test('sparse samples (17 to 133 ms apart) of CSS-like eases never end in a confirmed jump', () => {
+  const ease = EASINGS['strong ease-out'];
+  let jumps = 0;
+  for (const [amp, dur, eps] of [[0.03, 120, 0.01], [120, 400, 1], [300, 600, 1]]) {
+    for (let seed = 1; seed <= 400; seed++) {
+      const times = withRest(irregularTimes(prng(seed * 7919 + dur), 0, dur + 600, 1, 8));
+      if (analyzeSeries(times, times.map((t) => amp * ease(Math.max(0, t) / dur)), eps)?.jumps.length) jumps++;
+    }
+  }
+  assert.equal(jumps, 0);
+});

@@ -82,9 +82,11 @@ export const EASE_IN_MIN_MS = 60;
 // instantaneous velocity (or an Animation object says the animation restarted).
 export const FINE_SAMPLING_MS = 1.5 * FRAME_MS;
 export const JUMP_MAX_DT_MS = 2.5 * FRAME_MS;
-// A settled motion is judged on its own velocities, which are bounded whatever the interval (the mean
-// slope of a smooth curve over an interval never exceeds its steepest slope), so a machine that renders
-// 30 fps with stalls up to this long still gets its teleports found.
+// A step is a jump only if it was judged in an interval no longer than this, by frame time and by the time its value was read,
+// with both neighbouring intervals as short: a step inside a longer interval, or beside one, can only leave the motion
+// unresolved. Within the limit a settled motion is judged on its own velocities, which are bounded whatever the interval (the
+// mean slope of a smooth curve over an interval never exceeds its steepest slope), so a machine that renders 30 fps with
+// stalls up to this long still gets its teleports found.
 export const SERIES_JUMP_MAX_DT_MS = 6 * FRAME_MS;
 
 // An interval of a settled motion is a jump when it is a local speed peak (at least twice as fast as

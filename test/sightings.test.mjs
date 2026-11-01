@@ -123,3 +123,15 @@ test('a hover jump sighting follows the same rule per gesture, label and propert
   const focus = { unconfirmed: ['jump'], moments: { focus: { motion: [{ label: 'div.ring', moves: [move({ prop: 'width' })] }] } } };
   assert.deepEqual(kinds(focus, [gesture([]), null]), ['jump focus div.ring width']);
 });
+
+test('click path: values read after a long task leave no jump finding and no sighting, only an unresolved motion', () => {
+  const t = frames(50);
+  const reads = t.map((x, i) => x + (i > 14 ? 130 : 0));
+  const v = reads.map((r) => 300 * Math.min(1, Math.max(0, r) / 600));
+  const rec = { marks: [t[2]], anims: [], mounted: 0, elems: [el(7, 'div.panel', t, v)] };
+  rec.elems[0].r = reads;
+  const moved = analyzeRecording(rec);
+  assert.deepEqual(moved.flatMap((e) => e.moves.flatMap((m) => m.jumps)), [], 'no jump finding');
+  assert.deepEqual(jumpSightingsOf(moved), [], 'nothing to confirm or leave undecided as a jump');
+  assert.ok(moved.some((e) => e.moves.some((m) => m.unresolved > 0)), 'the stall leaves the motion unresolved');
+});

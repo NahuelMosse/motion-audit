@@ -64,7 +64,7 @@ export const unwrap = (v) => v.reduce((out, x, i) => {
 // both short neighbours. The first interval is skipped: an ease-out legitimately starts fastest.
 // `unresolved` counts steps that pass every test but the speed one, in a motion some interval of which is longer
 // than DENSE_MAX_MS (or in an interval too long to bound the velocity): the speed test cannot decide them.
-const findJumps = (t, v, start, settle, amp, t0, shape) => {
+const findJumps = (t, v, start, settle, amp, t0, shape, reads = t) => {
   const jumps = [];
   let unresolved = 0;
   if (settle - start < 4) return { jumps, unresolved };
@@ -73,14 +73,19 @@ const findJumps = (t, v, start, settle, amp, t0, shape) => {
   const peak = SERIES_PEAK_SLOPE * (shape === 'spring' ? 2 : 1);
   const velocity = (k) => {
     const dt = t[k] - t[k - 1];
-    return dt > 0 && dt <= SERIES_JUMP_MAX_DT_MS ? Math.abs(v[k] - v[k - 1]) / dt : null;
+    // The interval counts by the frame times and by when the values were read: a value read long after its frame started (a long
+    // task in between) says nothing about the frame-to-frame step.
+    const read = reads[k] - reads[k - 1];
+    return dt > 0 && dt <= SERIES_JUMP_MAX_DT_MS && read <= SERIES_JUMP_MAX_DT_MS ? Math.abs(v[k] - v[k - 1]) / dt : null;
   };
   for (let k = start + 1; k <= settle; k++) {
     const step = Math.abs(v[k] - v[k - 1]);
     if (step < JUMP_MIN_SHARE * amp) continue;
     const vel = velocity(k);
     if (vel === null) { unresolved++; continue; }
-    const neighbours = [velocity(k - 1), velocity(k + 1)].filter((x) => x !== null);
+    // Both neighbours must be judged too: a step between long intervals is not told from a steep easing.
+    const neighbours = [velocity(k - 1), velocity(k + 1)];
+    if (neighbours.includes(null)) { unresolved++; continue; }
     if (neighbours.some((x) => vel < SERIES_NEIGHBOUR_RATIO * x)) continue;
     // Sampled frame by frame (60 Hz) all along, a step slower than a jump is settled: it is no jump. With any longer
     // interval in the motion (a 30 fps machine, a stall) the question stays open.
@@ -93,7 +98,7 @@ const findJumps = (t, v, start, settle, amp, t0, shape) => {
 // A round trip (a toast in and out) is judged leg by leg, each against its own amplitude and speed:
 // the average speed of the whole series says nothing about any one leg. Returns jumps with `atMs`
 // relative to `t0`, the start of the whole series.
-const legJumps = (t, v, eps, t0) => {
+const legJumps = (t, v, eps, t0, reads = t) => {
   const first = v[0];
   let peak = 0;
   v.forEach((x, i) => { if (Math.abs(x - first) > Math.abs(v[peak] - first)) peak = i; });
@@ -105,7 +110,7 @@ const legJumps = (t, v, eps, t0) => {
   const out = [];
   let unresolved = 0;
   for (const [a, b] of [[0, arrive], [depart, v.length - 1]]) {
-    const leg = analyzeSeries(t.slice(a, b + 1), v.slice(a, b + 1), eps);
+    const leg = analyzeSeries(t.slice(a, b + 1), v.slice(a, b + 1), eps, [], [], reads.slice(a, b + 1));
     for (const j of leg?.jumps ?? []) out.push({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size });
     unresolved += leg?.unresolved ?? 0;
   }
@@ -128,7 +133,7 @@ const cadenceOf = (t) => {
   return { median: round(median(dts), 0), max: round(Math.max(0, ...dts), 0) };
 };
 
-export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
+export const analyzeSeries = (t, v, eps, cuts = [], longFrames = [], reads = t) => {
   const n = v.length;
   if (n < 4) return null;
   const first = v[0];
@@ -163,11 +168,11 @@ export const analyzeSeries = (t, v, eps, cuts = [], longFrames = []) => {
     // Joined nodes are separate motions: each is judged on its own, the joins by cutJumps.
     const bounds = [0, ...cuts, n];
     jumps = bounds.slice(1).flatMap((end, i) => {
-      const leg = analyzeSeries(t.slice(bounds[i], end), v.slice(bounds[i], end), eps);
+      const leg = analyzeSeries(t.slice(bounds[i], end), v.slice(bounds[i], end), eps, [], [], reads.slice(bounds[i], end));
       unresolved += leg?.unresolved ?? 0;
       return (leg?.jumps ?? []).map((j) => ({ atMs: round(leg.startT + j.atMs - t0, 0), size: j.size }));
     }).concat(cutJumps(t, v, cuts, eps, range, t0));
-  } else ({ jumps, unresolved } = shape === 'round-trip' ? legJumps(t, v, eps, t0) : findJumps(t, v, start, settle, amp, t0, shape));
+  } else ({ jumps, unresolved } = shape === 'round-trip' ? legJumps(t, v, eps, t0, reads) : findJumps(t, v, start, settle, amp, t0, shape, reads));
   // A step in a frame that overlaps a long frame is that frame: the animation's clock ran on while the thread was blocked.
   if (longFrames.length) {
     jumps = jumps.filter((j) => {
@@ -186,7 +191,7 @@ export const animatedMove = (m) => m.samples > 1 && m.durationMs > 2 * FRAME_MS;
 export const analyzeElement = (el, longFrames = []) => {
   const moves = [];
   for (const c of COLS) {
-    const r = analyzeSeries(el.t, c === 'rot' ? unwrap(el[c]) : el[c], EPS[PROP_OF[c]], el.cuts, longFrames);
+    const r = analyzeSeries(el.t, c === 'rot' ? unwrap(el[c]) : el[c], EPS[PROP_OF[c]], el.cuts, longFrames, el.r ?? el.t);
     if (r) moves.push({ prop: PROP_OF[c], ...r });
   }
   return moves.length ? { label: el.label, root: el.root, moves } : null;
@@ -215,9 +220,11 @@ export const joinRemounts = (elems) => {
     const joined = { ...head, cuts: [] };
     for (const c of COLS) joined[c] = [...head[c]];
     joined.t = [...head.t];
+    joined.r = [...(head.r ?? head.t)];
     for (let e = next.get(head); e; e = next.get(e)) {
       joined.cuts.push(joined.t.length);
       joined.t.push(...e.t);
+      joined.r.push(...(e.r ?? e.t));
       for (const c of COLS) joined[c].push(...e[c]);
     }
     return joined;
