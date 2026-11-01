@@ -26,17 +26,21 @@ export function tagTarget({ publishedHere, sha, gitHead, commitExists, packedSha
   return { sha: gitHead };
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) main();
+export class PlanError extends Error {}
 
-function main() {
-  const json = (file) => JSON.parse(readFileSync(file, 'utf8'));
-  const { name, version } = json('package.json');
-  const plugin = json('.claude-plugin/plugin.json').version;
-  const { GITHUB_REF_TYPE: refType, GITHUB_REF_NAME: refName, GITHUB_OUTPUT: outputFile } = process.env;
+// The arguments of every `npm pack` this release makes: no scripts, the job that runs them can hold a publishing token.
+export const PACK_ARGS = ['pack', '--dry-run', '--json', '--ignore-scripts'];
 
-  if (version !== plugin) fail(`package.json (${version}) and plugin.json (${plugin}) differ`);
-  if (refType === 'tag' && refName !== `v${version}`) fail(`tag ${refName} is not v${version}`);
-  console.log(`package.json ${version}, plugin.json ${plugin}`);
+// The plan, from what it is told and nothing it fetches itself: `env` (GITHUB_REF_TYPE, GITHUB_REF_NAME, GITHUB_SHA), the
+// package, `view(spec, field)` (npm view: the value, '' for a version that does not exist, null for a package that does not), `pack(sha)`
+// (the shasum of the tarball the tree at that commit packs to, null when it cannot), `tagExists(tag)` and `commitInRepo(sha)`.
+// The tarball of the commit is always packed (`pack`) and compared with npm's (`view`): never one with itself. Returns { output, log }.
+export function planRelease({ env, name, version, pluginVersion, view, pack, tagExists, commitInRepo }) {
+  const log = [];
+  const { GITHUB_REF_TYPE: refType, GITHUB_REF_NAME: refName, GITHUB_SHA: sha } = env;
+  if (version !== pluginVersion) throw new PlanError(`package.json (${version}) and plugin.json (${pluginVersion}) differ`);
+  if (refType === 'tag' && refName !== `v${version}`) throw new PlanError(`tag ${refName} is not v${version}`);
+  log.push(`package.json ${version}, plugin.json ${pluginVersion}`);
 
   const output = {
     version,
@@ -48,10 +52,10 @@ function main() {
   };
   if (refType === 'tag' || refName === 'main') {
     if (view(name, 'name') === null) {
-      console.log(`::notice::${name} is not on npm yet: the first version is published by hand (trusted publishing needs an existing package)`);
+      log.push(`::notice::${name} is not on npm yet: the first version is published by hand (trusted publishing needs an existing package)`);
       output.mode = 'none';
     } else if (view(`${name}@${version}`, 'version') === version) {
-      console.log(`${name}@${version} is already on npm: nothing to publish`);
+      log.push(`${name}@${version} is already on npm: nothing to publish`);
       output.mode = 'none';
       output['on-npm'] = 'true';
     } else {
@@ -60,24 +64,40 @@ function main() {
     // A tag push already has its tag. Otherwise tag the version unless the remote has the tag.
     if (refType !== 'tag' && (output.mode === 'publish' || output['on-npm'] === 'true')) {
       const tag = `v${version}`;
-      if (tagExists(tag)) console.log(`${tag} already exists`);
+      if (tagExists(tag)) log.push(`${tag} already exists`);
       else {
         const publishedHere = output.mode === 'publish';
         const gitHead = publishedHere ? '' : view(`${name}@${version}`, 'gitHead') ?? '';
         const commitExists = Boolean(gitHead) && commitInRepo(gitHead);
         const target = tagTarget({
-          publishedHere, sha: process.env.GITHUB_SHA, gitHead, commitExists,
-          packedShasum: commitExists ? packShasumAt(gitHead) : null,
+          publishedHere, sha, gitHead, commitExists,
+          packedShasum: commitExists ? pack(gitHead) : null,
           publishedShasum: commitExists ? view(`${name}@${version}`, 'dist.shasum') || null : null,
         });
-        if (target.warning) console.log(`::warning::${target.warning}`);
+        if (target.warning) log.push(`::warning::${target.warning}`);
         else output['tag-sha'] = target.sha;
       }
     }
   }
-  for (const [key, value] of Object.entries(output)) {
+  return { output, log };
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) main();
+
+function main() {
+  const json = (file) => JSON.parse(readFileSync(file, 'utf8'));
+  const { name, version } = json('package.json');
+  let plan;
+  try {
+    plan = planRelease({ env: process.env, name, version, pluginVersion: json('.claude-plugin/plugin.json').version, view, pack: packShasumAt, tagExists, commitInRepo });
+  } catch (error) {
+    if (error instanceof PlanError) fail(error.message);
+    throw error;
+  }
+  for (const line of plan.log) console.log(line);
+  for (const [key, value] of Object.entries(plan.output)) {
     console.log(`${key}=${value}`);
-    if (outputFile) appendFileSync(outputFile, `${key}=${value}\n`);
+    if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
   }
 }
 
@@ -109,7 +129,7 @@ function packShasumAt(sha) {
   const dir = mkdtempSync(join(tmpdir(), 'release-pack-'));
   try {
     if (git(['worktree', 'add', '--detach', dir, sha]) === null) return null;
-    const out = execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: dir, encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'ignore'] });
+    const out = execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', PACK_ARGS, { cwd: dir, encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'ignore'] });
     return JSON.parse(out)[0]?.shasum ?? null;
   } catch {
     return null;

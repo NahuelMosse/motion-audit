@@ -79,7 +79,7 @@ jobs:
           npm --version
       - name: Pack (a branch other than main only shows what would be published)
         if: needs.test.outputs.mode == 'pack'
-        run: npm pack --dry-run
+        run: npm pack --dry-run --ignore-scripts
       - if: needs.test.outputs.mode == 'publish'
         run: npm publish --tag "${{ needs.test.outputs.dist-tag }}"
       - name: Tag the commit the version was published from
