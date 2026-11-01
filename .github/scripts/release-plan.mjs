@@ -7,17 +7,22 @@
 //                 commit npm recorded for the version (a hand publish can come from any commit)
 // It needs no installed dependencies, so the publishing job can run it without `npm ci`.
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 // Which commit gets the tag. `publishedHere`: this run publishes it, so its own commit is right. Otherwise the version
 // was published elsewhere and only the gitHead npm recorded names its commit; without one that is in this repository,
-// tagging the current commit would be a guess.
-export function tagTarget({ publishedHere, sha, gitHead, commitExists }) {
+// tagging the current commit would be a guess. A hand publish can come from a dirty tree, so that commit is tagged only when
+// packing it gives the tarball npm has (`packedShasum`, from `npm pack --dry-run --json` at that commit, against
+// `publishedShasum`, npm's `dist.shasum`).
+export function tagTarget({ publishedHere, sha, gitHead, commitExists, packedShasum, publishedShasum }) {
   if (publishedHere) return { sha };
   if (!gitHead) return { warning: 'npm records no gitHead for this version: not tagging it, tag the commit it was published from by hand' };
   if (!commitExists) return { warning: `npm records gitHead ${gitHead} for this version, which is not in this repository: not tagging it` };
+  if (!packedShasum || !publishedShasum) return { warning: `could not compare the tarball of ${gitHead} with the one on npm (packed ${packedShasum ?? 'nothing'}, npm ${publishedShasum ?? 'nothing'}): not tagging it` };
+  if (packedShasum !== publishedShasum) return { warning: `packing ${gitHead} gives ${packedShasum} but npm has ${publishedShasum} for this version: it was published from a tree that differs from that commit (a dirty tree?), not tagging it` };
   return { sha: gitHead };
 }
 
@@ -59,7 +64,12 @@ function main() {
       else {
         const publishedHere = output.mode === 'publish';
         const gitHead = publishedHere ? '' : view(`${name}@${version}`, 'gitHead') ?? '';
-        const target = tagTarget({ publishedHere, sha: process.env.GITHUB_SHA, gitHead, commitExists: Boolean(gitHead) && commitInRepo(gitHead) });
+        const commitExists = Boolean(gitHead) && commitInRepo(gitHead);
+        const target = tagTarget({
+          publishedHere, sha: process.env.GITHUB_SHA, gitHead, commitExists,
+          packedShasum: commitExists ? packShasumAt(gitHead) : null,
+          publishedShasum: commitExists ? view(`${name}@${version}`, 'dist.shasum') || null : null,
+        });
         if (target.warning) console.log(`::warning::${target.warning}`);
         else output['tag-sha'] = target.sha;
       }
@@ -92,6 +102,21 @@ function commitInRepo(sha) {
   if (git(['cat-file', '-e', `${sha}^{commit}`]) !== null) return true;
   git(['fetch', '--no-tags', 'origin', sha]);
   return git(['cat-file', '-e', `${sha}^{commit}`]) !== null;
+}
+
+// The shasum `npm pack --dry-run --json` reports for the tree at `sha` (no scripts run), null when it cannot be packed.
+function packShasumAt(sha) {
+  const dir = mkdtempSync(join(tmpdir(), 'release-pack-'));
+  try {
+    if (git(['worktree', 'add', '--detach', dir, sha]) === null) return null;
+    const out = execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: dir, encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'ignore'] });
+    return JSON.parse(out)[0]?.shasum ?? null;
+  } catch {
+    return null;
+  } finally {
+    git(['worktree', 'remove', '--force', dir]);
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function git(args) {
