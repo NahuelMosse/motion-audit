@@ -63,8 +63,6 @@ export const clickRows = (label, first, unconfirmed, reruns) => {
   return rows;
 };
 
-// A toggle whose reversal showed a restart in one probe: kept when most probes agree, otherwise dropped (`undecided` is
-// null) or left undecided ('flake' | 'unseen'). `again`: the other probes; one that did not run has no jumps and no coverage.
 // The re-measure the majority vote asks of the --click check: the measurement again with its retries off (two presses, four with
 // --interrupt), recorded in `reruns` as what the sighting rules read.
 export const clickRerun = (measure, reruns) => async () => {
@@ -73,6 +71,8 @@ export const clickRerun = (measure, reruns) => async () => {
   return again.missing ? null : again;
 };
 
+// A toggle whose reversal showed a restart in one probe: kept when most probes agree, otherwise dropped (`undecided` is
+// null) or left undecided ('flake' | 'unseen'). `again`: the other probes; one that did not run has no jumps and no coverage.
 export const confirmToggle = (r, again) => {
   if (1 + again.filter((x) => x.jumps?.length).length >= CONFIRM_MAJORITY) return r;
   const verdict = unconfirmedVerdict(r.sightings ?? [], again.map((x) => ({ saw: x.jumps ?? [], coverage: x.coverage ?? NO_COVERAGE })), { mark: true });
