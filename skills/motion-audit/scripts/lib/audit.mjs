@@ -33,6 +33,7 @@ const confirm = async (first, aspects, rerun) => {
   return later;
 };
 
+const unresolvedMoves = (el) => Object.entries(el.moments).flatMap(([moment, d]) => d.motion.flatMap((e) => e.moves.filter((m) => m.unresolved > 0 && !m.jumps.length).map((m) => ({ moment, label: e.label, prop: m.prop, cadence: m.cadence }))));
 const jumpKeys = (el) => Object.entries(el.moments).flatMap(([m, d]) => d.motion.flatMap((e) => e.moves.flatMap((mv) => mv.jumps.map(() => `${m}|${e.label}|${mv.prop}`))));
 // Long frames are confirmed per gesture: a frame that shows up in the press of one run and in the
 // focus of the next is two borderline frames, not one confirmed long frame.
@@ -40,6 +41,8 @@ const elementAspects = (first) => ({
   ...Object.fromEntries([...new Set(first.long.map((l) => l.moment))].map((m) => [`long:${m}`, (e) => e.long.some((l) => l.moment === m)])),
   interrupt: (e) => (e.interrupt?.length ?? 0) > 0,
   jump: (e) => jumpKeys(e).length > 0,
+  // A step the frames could not judge: the re-measures decide whether it is ruled out or stays undecided.
+  unresolved: (e) => unresolvedMoves(e).length > 0,
 });
 const dropUnconfirmed = (el) => {
   for (const name of el.unconfirmed ?? []) {
@@ -303,7 +306,7 @@ export const audit = async (pageOrUrl, o = {}) => {
       cssUnreadable: unreadable,
       coverage,
       notes,
-      elements: elements.map(({ label, kind, transition, moments, interrupt, reduced: red, pressMode, hoverOnly }) => ({ label, kind, pressMode, hoverOnly, transition, moments: Object.fromEntries(Object.entries(moments).map(([k, d]) => [k, { changed: d.changed, pixels: d.pixels, transition: d.transition, motion: d.motion }])), interrupt, reduced: red })),
+      elements: elements.map(({ label, kind, transition, moments, interrupt, reduced: red, pressMode, hoverOnly }) => ({ label, kind, pressMode, hoverOnly, transition, moments: Object.fromEntries(Object.entries(moments).map(([k, d]) => [k, { changed: d.changed, pixels: d.pixels, transition: d.transition, cadence: d.cadence, motion: d.motion }])), interrupt, reduced: red })),
       sections: scroll.sections,
       toggles,
       click,

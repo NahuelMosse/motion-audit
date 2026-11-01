@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import { audit, exitCode } from '../skills/motion-audit/scripts/lib/index.mjs';
 import { CLI_MATRIX } from './fixture-matrix.mjs';
 import { FIXTURES, removeScratch, runCli } from './helpers/cli.mjs';
-import { GOLDEN_PATH, againstGolden, densityTally, noteRecording, reportDense, requireSomeDense } from './helpers/golden.mjs';
+import { GOLDEN_PATH, againstGolden, densityTally, isDenseCadence, noteRecording, requireSomeDense } from './helpers/golden.mjs';
 import { serve } from './helpers/serve.mjs';
 
 let srv;
@@ -50,8 +50,8 @@ for (const [position, entry] of CLI_MATRIX.entries()) {
     assert.deepEqual(got.findings, golden[entry.name].findings);
     assert.equal(r.code, got.exit);
     assert.deepEqual(got.problems, [], 'an inconclusive row breaks the rule of golden.mjs');
-    // A pure CSS transition at 60 Hz gives no row at all, of any kind.
-    if (CLEAN.has(entry.name) && reportDense(r.report)) assert.deepEqual(r.report.findings.filter((f) => f.kind === 'inconclusive'), []);
+    // A pure CSS transition at 60 Hz gives no row at all: on these fixtures every inconclusive row must carry a sparse cadence of its own.
+    if (CLEAN.has(entry.name)) for (const f of r.report.findings.filter((x) => x.kind === 'inconclusive')) assert.equal(isDenseCadence(f.cadence), false, `${f.element}: ${f.detail}`);
     if (got.standIns.length) t.diagnostic(`on a sparse recording an inconclusive row stands in for: ${got.standIns.join(', ')}`);
     if (got.extras.length) t.diagnostic(`on a sparse recording, extra inconclusive rows: ${got.extras.map((f) => f.element).join(', ')}`);
   });

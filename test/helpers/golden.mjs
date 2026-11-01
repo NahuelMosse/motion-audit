@@ -12,6 +12,7 @@
 //   is tolerated") allows no inconclusive row at all, and the run fails if no recording in it was dense.
 import { join } from 'node:path';
 import { DENSE_MAX_MS, DENSE_MEDIAN_MS } from '../../skills/motion-audit/scripts/lib/constants.mjs';
+import { isDense } from '../../skills/motion-audit/scripts/lib/sightings.mjs';
 import { ROOT } from './cli.mjs';
 
 export { DENSE_MAX_MS, DENSE_MEDIAN_MS };
@@ -19,7 +20,8 @@ export const GOLDEN_PATH = join(ROOT, 'test', 'expected-findings.json');
 export const REQUIRE_DENSE = Boolean(process.env.MOTION_REQUIRE_DENSE);
 export const signature = (report) => report.findings.filter((f) => f.kind !== 'inconclusive').map((f) => `${f.level}|${f.id}|${f.element}`).sort();
 
-export const isDenseCadence = (c) => Boolean(c) && c.median <= DENSE_MEDIAN_MS && c.max <= DENSE_MAX_MS;
+// The product's own test of a dense cadence, not a copy of it.
+export const isDenseCadence = isDense;
 
 // Every cadence a report recorded: the click's frames and every measured motion's.
 export const reportCadences = (report) => [

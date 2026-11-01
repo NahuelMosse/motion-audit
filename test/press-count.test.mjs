@@ -77,13 +77,20 @@ test('an odd count without --interrupt is restored by one more press; with --int
   await twice.measure(1);
   assert.equal(twice.state.presses % 2, 0);
   assert.equal(await twice.measure.restore(), false);
-  // the worst case with the restore still holds the cap: seven presses become eight, never nine
+  // the worst case is already eight presses (four attempts, then two re-measures of two): the restore has nothing to add, never a ninth
   const worst = page(series.bump, cadence.sparse, false);
   await worst.measure();
   for (const rerun of [1, 2]) await clickRerun(worst.measure, [])();
-  assert.ok(worst.state.presses <= 8);
-  await worst.measure.restore();
-  assert.ok(worst.state.presses <= 8 && worst.state.presses % 2 === 0, `${worst.state.presses}`);
+  assert.equal(worst.state.presses, 8);
+  assert.equal(await worst.measure.restore(), false);
+  assert.equal(worst.state.presses, 8);
+  // seven presses (a measurement with one retry, then the two re-measures) become eight: the one step of the restore inside the cap
+  const seven = page(series.bump, cadence.sparse, false);
+  await seven.measure(1);
+  for (const rerun of [1, 2]) await clickRerun(seven.measure, [])();
+  assert.equal(seven.state.presses, 7);
+  assert.equal(await seven.measure.restore(), true);
+  assert.equal(seven.state.presses, 8);
   // the confirmation re-measure presses twice (four with --interrupt) however unresolved the motion: a mutation of measure(0) into measure() fails here
   for (const interrupt of [false, true]) {
     const p = page(series.bump, cadence.sparse, interrupt);

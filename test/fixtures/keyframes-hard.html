@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A CSS keyframe animation that teleports half-way (49.99% to 50%)</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 32px; }
+  button { font: inherit; border: 1px solid #bbb; background: #f2f2f2; padding: 8px 14px; border-radius: 8px; transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  button:hover { background: #e4e4e4; }
+  button:active { transform: scale(0.97); }
+  :focus-visible { outline: 2px solid #2a5bd7; outline-offset: 2px; }
+  .lane { height: 60px; margin-top: 24px; }
+  .box { width: 40px; height: 40px; background: #2a5bd7; transform: translateX(0); }
+  .go .box { animation: hop 600ms linear forwards; }
+  @keyframes hop { 0% { transform: translateX(0); } 49.99% { transform: translateX(60px); } 50% { transform: translateX(330px); } 100% { transform: translateX(390px); } }
+  @media (prefers-reduced-motion: reduce) { .go .box { animation: none; transform: translateX(390px); } button:active { transform: none; } }
+</style>
+</head>
+<body>
+<button id="go" type="button">Hop</button>
+<div class="lane" id="lane"><div class="box"></div></div>
+<script>
+  document.getElementById('go').addEventListener('click', () => document.getElementById('lane').classList.add('go'));
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 import { join } from 'node:path';
 import {
   CLICK_INTERRUPT_MS, CLICK_LEAD_MS, CLICK_RECORD_MS, CLICK_RESOLVE_RETRIES, CONTACT_SHEET_STEP_MS, PRESS_GUARD_MS, DENY_SELECTOR, DENY_TEXT, NAMED_CONTROL, FRAME_MS,
-  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, CLICK_UNSURE_MAX_DT_MS, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
+  HIT_TEST_POINTS, INTERRUPT_LEAD_MS, INTERRUPT_MIN_MOTION_MS, INTERRUPT_RETRIES, SETTLE_MAX_MS, SETTLE_MIN_MS, SETTLE_QUIET_MS,
   REDUCED_LOOP_SPINNER_PX, SPARSE_DENSITY, SPARSE_MIN_MOTION_MS, SPARSE_RETRIES, TOGGLE, TOGGLE_MIN_MOTION_MS, TOGGLE_SHARES, VIEWPORT, VISIBLE_PROPS,
   TOGGLE_QUIET_MS, TOGGLE_SETTLE_MIN_MS,
 } from './constants.mjs';
@@ -167,7 +167,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
         el.interruptCadence = around;
         // What this recording could see of the second gesture, and how clear each sighting was.
         el.interruptCoverage = rec?.marks.length ? coverageOf(analyzeRecording(rec), { mark: around }) : NO_COVERAGE;
-        el.interruptSightings = el.interrupt.map((j) => ({ label: j.label, prop: j.prop, dense: isDense(around) }));
+        el.interruptSightings = el.interrupt.map((j) => ({ label: j.label, prop: j.prop, dense: isDense(around), cadence: around }));
         if (!el.interruptUnsure) break;
       }
     }
@@ -187,7 +187,7 @@ export const auditElement = async (ctx, original, label, { hoverOnly = false } =
   const afterPx = await shot(page, box);
   const wrapperChanged = wrapperBefore.flatMap((b, i) => diff(b, wrapperAfter[i]).map((p) => `wrapper:${p}`));
   const hiddenUntilHover = hoverOnly && (await stillTransparent(ring));
-  el.moments.focus = { changed: [...diff(before, after), ...wrapperChanged], pixels: await ctx.pixels.differ(beforePx, afterPx), motion: focus.motion, transition: transition(await ring.evaluate(readTransition)), hiddenUntilHover };
+  el.moments.focus = { changed: [...diff(before, after), ...wrapperChanged], pixels: await ctx.pixels.differ(beforePx, afterPx), rootLabel: focus.rec?.elems?.find((x) => x.root)?.label, cadence: frameCadence(focus.rec), motion: focus.motion, transition: transition(await ring.evaluate(readTransition)), hiddenUntilHover };
   el.long.push(...focus.long.map((l) => ({ moment: 'focus', ...l })));
   await pseudo.clear(ids);
   return { el };
@@ -259,7 +259,7 @@ export const probeToggle = async (ctx, index) => {
         const mark = rec.marks.at(-1);
         const found = interruptionJumps(rec, mark, { durationMs: dur });
         const around = markCadence(rec, mark);
-        for (const j of found) jumps.push({ ...j, direction });
+        for (const j of found) jumps.push({ ...j, direction, cadence: around });
         if (found.length) { sighted = true; if (!isDense(around)) dense = false; } else unsure ??= restartUnfollowed(rec, mark);
         cadence ??= around;
         coverage = mergeCoverage(coverage, coverageOf(analyzeRecording(rec), { mark: around }));
@@ -279,7 +279,7 @@ export const probeToggle = async (ctx, index) => {
     if (clicks % 2) await click().catch((e) => ctx.notes.push(`could not restore toggle ${label}: ${e.message.split('\n')[0]}`));
   }
   jumps.sort((x, y) => y.delta - x.delta);
-  const sightings = [...new Map(jumps.map((j) => [`${j.label}|${j.prop}`, { label: j.label, prop: j.prop, dense: sighted && dense }])).values()];
+  const sightings = [...new Map(jumps.map((j) => [`${j.label}|${j.prop}`, { label: j.label, prop: j.prop, dense: sighted && dense, cadence: j.cadence }])).values()];
   return { label, dur, jumps, sightings, coverage, unsure, cadence, dense: sighted && dense };
 };
 
@@ -288,12 +288,12 @@ export const probeToggle = async (ctx, index) => {
 // Everything that moves for 1.5 s after a real click, with the tracer off for the long-frame pass
 // (tracing hundreds of nodes would itself overrun the frames it times) and on for the trajectories.
 // The jumps seen in a recording, with how clear each was (whatever drives the motion).
-export const jumpSightingsOf = (moved) => moved.flatMap((e) => e.moves.filter((m) => m.jumps.length).map((m) => ({ label: e.label, prop: m.prop, dense: isDense(m.cadence) })));
+export const jumpSightingsOf = (moved) => moved.flatMap((e) => e.moves.filter((m) => m.jumps.length).map((m) => ({ label: e.label, prop: m.prop, dense: isDense(m.cadence), cadence: m.cadence })));
 
 // The cadence of the step a click's jump check could not decide, or null: only script-driven motion (the browser
 // says a CSS transition or animation is one, and no teleport) whose step fell in intervals too long to judge.
 export const clickUnsure = (moved) => moved.flatMap((e) => e.moves)
-  .filter((m) => m.unresolved && m.cadence.max > CLICK_UNSURE_MAX_DT_MS).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null;
+  .filter((m) => m.unresolved).sort((a, b) => b.cadence.max - a.cadence.max)[0]?.cadence ?? null;
 
 // Median and longest interval between the frames recorded after the click: how well the recording could follow a value.
 // Median and longest interval (ms) between the frames of a recording from `from` on: how well it could follow a value.
@@ -307,9 +307,26 @@ export const recordingCadence = (rec) => frameCadence(rec, (rec.marks[0] ?? 0) -
 // One press of the target and the recording of what follows it: `trace` records the trajectories, otherwise only the long frames.
 // Each call presses the target once (twice with `interrupt`): the press budget of --click is counted in calls. `.press()` is a bare
 // press, used to restore the state a target keeps (server side, storage) when the count of presses ended odd.
+const REQUEST_TYPES = new Set(['fetch', 'xhr', 'ping', 'other']);
 const pageAttempt = (ctx, selector, interrupt) => {
   const { page, url } = ctx;
+  // Each attempt reloads the page: a request the last press started and that has not finished is lost with it, and so is a timer that
+  // would send one later, so the state the target keeps may differ from the press count. Pending requests are said; timers cannot be seen.
+  const pending = new Set();
+  const started = (r) => { if (REQUEST_TYPES.has(r.resourceType())) pending.add(r); };
+  const ended = (r) => pending.delete(r);
+  page.on('request', started);
+  page.on('requestfinished', ended);
+  page.on('requestfailed', ended);
+  let warned = false;
+  const beforeReload = () => {
+    if (pending.size && !warned) {
+      warned = true;
+      ctx.notes.push(`click ${selector}: ${pending.size} request(s) were still pending when the page was reloaded for the next press: their effect may not have landed, so the state the target keeps may not be restored`);
+    }
+  };
   const attempt = async (trace) => {
+    beforeReload();
     await load(page, url, ctx.loadOptions);
     const target = await page.$(selector);
     if (!target) return { missing: 'matches nothing' };
@@ -327,7 +344,9 @@ const pageAttempt = (ctx, selector, interrupt) => {
     const loaf = await page.evaluate(() => window.__mt.loaf);
     return { from, loaf, rec: trace ? await page.evaluate(() => window.__mt.end('c')) : null };
   };
+  attempt.release = () => { page.off('request', started); page.off('requestfinished', ended); page.off('requestfailed', ended); };
   attempt.press = async () => {
+    beforeReload();
     await load(page, url, ctx.loadOptions);
     const target = await page.$(selector);
     const point = target && (await reachablePoint(target));
@@ -386,7 +405,7 @@ export const clickMeasurer = (ctx, selector, interrupt, makeAttempt = pageAttemp
       interrupt: interruptJumps,
       // The second click could not be judged (a restart the frames cannot follow), and how clear a sighting was.
       interruptUnsure: interrupt && rec.marks.length > 1 && !interruptJumps.length ? restartUnfollowed(rec, rec.marks[1]) : null,
-      interruptSightings: interruptJumps.map((j) => ({ label: j.label, prop: j.prop, dense: isDense(rec.marks.length > 1 ? markCadence(rec, rec.marks[1]) : null) })),
+      interruptSightings: interruptJumps.map((j) => { const around = rec.marks.length > 1 ? markCadence(rec, rec.marks[1]) : null; return { label: j.label, prop: j.prop, dense: isDense(around), cadence: around }; }),
       mounted: rec.mounted,
     };
   };
@@ -394,9 +413,9 @@ export const clickMeasurer = (ctx, selector, interrupt, makeAttempt = pageAttemp
   // Without --interrupt a retry is one press: an odd count leaves a target that keeps state (a drawer opened server side) toggled,
   // so it is pressed once more. With --interrupt every recording presses twice and the count is even.
   measure.restore = async () => {
-    if (interrupt || presses % 2 === 0 || !pressing.press) return false;
-    const pressed = await pressing.press();
+    const pressed = !interrupt && presses % 2 === 1 && pressing.press ? await pressing.press() : false;
     if (pressed) presses++;
+    pressing.release?.();
     return pressed;
   };
   return measure;
