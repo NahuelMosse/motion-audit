@@ -17,3 +17,12 @@ export const sharded = (name, ...rest) => {
   // An explicit `skip` decides (the golden loop shards by position itself).
   return test(name, { ...options, skip: 'skip' in options ? options.skip : (inShard(name) ? false : 'other shard') }, fn);
 };
+
+// MA_SMOKE_ONLY (the macOS and Windows jobs): the tool runs, exits with the right code, presses within its contract and leaves nothing
+// behind. Checks that need dense 60 Hz frames (exact goldens, a measured jump or layout) are exact-only and run on ubuntu.
+export const SMOKE_ONLY = Boolean(process.env.MA_SMOKE_ONLY);
+export const EXACT_ONLY_REASON = 'exact goldens need dense 60 Hz frames; macOS/Windows runners drop frames irregularly; covered by the ubuntu jobs with MOTION_REQUIRE_DENSE=1; the smoke checks run here';
+export const exact = (name, ...rest) => {
+  const fn = rest.pop();
+  return test(name, { skip: SMOKE_ONLY ? EXACT_ONLY_REASON : (inShard(name) ? false : 'other shard') }, fn);
+};

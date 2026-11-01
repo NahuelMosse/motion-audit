@@ -1,5 +1,5 @@
 import { after, before } from 'node:test';
-import { inShard, sharded as test } from './helpers/shard.mjs';
+import { EXACT_ONLY_REASON, SMOKE_ONLY, exact, inShard, sharded as test } from './helpers/shard.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -40,7 +40,7 @@ const CLEAN = new Set(['good', 'drawer-good', 'shadcn-fixed', 'table-toast-cpu4'
 // The golden comparison of every matrix entry. The three-runs job (fixture-runs.mjs) compares each
 // of its runs to the same golden file, so a job that runs it sets MA_SKIP_GOLDEN to audit nothing twice.
 for (const [position, entry] of CLI_MATRIX.entries()) {
-  const skip = process.env.MA_SKIP_GOLDEN ? 'covered by the three-runs job' : !inShard(entry.name, position) && 'other shard';
+  const skip = SMOKE_ONLY ? EXACT_ONLY_REASON : process.env.MA_SKIP_GOLDEN ? 'covered by the three-runs job (ubuntu, MOTION_REQUIRE_DENSE=1)' : !inShard(entry.name, position) && 'other shard';
   test(`fixture ${entry.name} yields exactly the expected findings and exit code`, { skip }, async (t) => {
     const r = await runCli([`${srv.url}/${entry.fixture}`, ...entry.args, '--json']);
     assert.ok(r.report, r.stderr);
@@ -97,7 +97,7 @@ test('--interact never touches the delete button, the drag handle or the slider,
   });
 });
 
-test('an overlay appended to body on open is traced: its animated height is found and its nodes are counted', async () => {
+exact('an overlay appended to body on open is traced: its animated height is found and its nodes are counted', async () => {
   const report = await audit(`${srv.url}/overlay-portal.html`, { click: '#open', out: undefined });
   assert.ok(report.click.mounted > 0, 'mounted nodes were followed');
   assert.ok(report.findings.some((f) => f.kind === 'layout-animated' && f.element === 'click #open'));

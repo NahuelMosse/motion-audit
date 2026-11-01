@@ -1,5 +1,5 @@
 import { after, before } from 'node:test';
-import { sharded as test } from './helpers/shard.mjs';
+import { exact, sharded as test } from './helpers/shard.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -57,7 +57,7 @@ test('a toast that teleports in, holds and leaves is a jump error', async () => 
   assert.equal(unsure.level, 'warning');
 });
 
-test('a node re-mounted mid-animation is a jump error', async () => {
+exact('a node re-mounted mid-animation is a jump error', async () => {
   const report = await audit(`${srv.url}/remount.html`, { click: '#open' });
   const jump = report.findings.find((f) => f.kind === 'jump' && f.element === 'click #open');
   assert.ok(jump, JSON.stringify(report.findings.map((f) => [f.kind, f.element, f.detail])));

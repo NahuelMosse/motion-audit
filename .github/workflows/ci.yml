@@ -29,8 +29,8 @@ jobs:
       - run: npm ci
       - run: npm run test:unit
 
-  # Everything that drives Chromium, once per OS on Node 24, split in parallel shards. On Linux the
-  # golden comparison of the fixtures is left to the three-runs job, which checks the same golden file.
+  # Everything that drives Chromium, once per OS on Node 24, split in parallel shards. On Linux the golden comparison of the
+  # fixtures is left to the three-runs job, which checks the same golden file; on macOS and Windows the browser tests are smoke.
   browser:
     name: browser (${{ matrix.os }}, shard ${{ matrix.shard }}/3)
     runs-on: ${{ matrix.os }}
@@ -58,6 +58,9 @@ jobs:
         env:
           MA_SHARD: ${{ matrix.shard }}/3
           MA_SKIP_GOLDEN: ${{ runner.os == 'Linux' && '1' || '' }}
+          # macOS and Windows runners drop frames irregularly: there the browser tests are smoke (the tool runs, exits with the right code,
+          # presses within its contract, leaves nothing behind); exact goldens need dense frames and run on ubuntu with MOTION_REQUIRE_DENSE=1.
+          MA_SMOKE_ONLY: ${{ runner.os != 'Linux' && '1' || '' }}
 
   # Every fixture three times on Linux: identical fingerprints each time, equal to the golden file, with dense recordings required.
   stability:
