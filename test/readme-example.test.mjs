@@ -22,7 +22,7 @@ before(async () => {
   // treats them as installed code).
   const installed = join(consumer, 'node_modules', 'motion-audit');
   mkdirSync(installed, { recursive: true });
-  cpSync(join(ROOT, 'skills'), join(installed, 'skills'), { recursive: true, filter: (src) => !src.includes('fixtures') });
+  cpSync(join(ROOT, 'skills'), join(installed, 'skills'), { recursive: true });
   cpSync(join(ROOT, 'package.json'), join(installed, 'package.json'));
   writeFileSync(join(consumer, 'package.json'), JSON.stringify({ name: 'consumer', private: true }));
   writeFileSync(join(consumer, 'playwright.config.mjs'), `export default { testDir: '.', testMatch: /motion\\.spec\\.(ts|mjs)$/, reporter: 'line', workers: 1, use: { baseURL: process.env.APP_URL } };\n`);

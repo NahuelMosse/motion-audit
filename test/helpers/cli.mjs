@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const FIXTURES = join(ROOT, 'skills', 'motion-audit', 'fixtures');
+export const FIXTURES = join(ROOT, 'test', 'fixtures');
 export const CLI = join(ROOT, 'skills', 'motion-audit', 'scripts', 'motion-audit.mjs');
 
 // Child processes (and the browsers they start) write their temp files here, removed by removeScratch().

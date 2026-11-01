@@ -4,6 +4,7 @@ description: Use when the user asks to audit, test or QA the motion, animations 
 allowed-tools:
   - Bash(node ${CLAUDE_SKILL_DIR}/scripts/*)
   - Bash(node "${CLAUDE_SKILL_DIR}/scripts/*")
+  - Bash(npx --no-install motion-audit *)
 ---
 
 # Motion audit
@@ -71,8 +72,9 @@ Audit a **production build** (`next start`, `vite preview`, a deployed preview),
 builds add HMR, overlays and unminified work: the audit detects them, says so, and downgrades
 `long-frame` to a warning, but only a production build gives frame timings that mean something.
 
-The same command works in Git Bash, other POSIX shells and PowerShell (`${CLAUDE_SKILL_DIR}` is
-substituted before the shell runs it; the single-quoted selectors are literal in both):
+If the project has `motion-audit` as a devDependency, prefer `npx --no-install motion-audit <url> ...`: it runs
+the version the project pins. Otherwise run the script bundled with this skill. The same command works in Git Bash, other POSIX shells and
+PowerShell (`${CLAUDE_SKILL_DIR}` is substituted before the shell runs it; the single-quoted selectors are literal in both):
 
 ```bash
 node "${CLAUDE_SKILL_DIR}/scripts/motion-audit.mjs" http://localhost:3000/orders
