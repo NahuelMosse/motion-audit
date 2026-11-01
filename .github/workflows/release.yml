@@ -3,7 +3,8 @@
 # Dependabot updates that reach the package raise it by themselves (dependabot-automerge.yml).
 # The first version is published by hand, because npm trusted publishing can only be configured on an existing package;
 # until then the plan finds the package missing and nothing runs. Once it is on npm, a version that is already published
-# only gets its v<version> tag, if that is missing.
+# only gets its v<version> tag, if that is missing, on the commit npm recorded for it (gitHead; no tag if there is none
+# or it is not in this repository). A version this run publishes is tagged with the run's own commit.
 # Two jobs, so that the code that runs the tests and its dependencies never holds the publishing token: `test` has
 # read-only permissions, `publish` installs nothing.
 name: release
@@ -75,10 +76,10 @@ jobs:
         run: npm pack --dry-run
       - if: steps.plan.outputs.mode == 'publish'
         run: npm publish --tag "${{ steps.plan.outputs.dist-tag }}"
-      - name: Tag the version that is on npm
-        if: (steps.plan.outputs.mode == 'publish' || steps.plan.outputs.on-npm == 'true') && github.ref_type != 'tag'
+      - name: Tag the commit the version was published from
+        if: steps.plan.outputs.tag-sha != ''
         run: |
           tag="v${{ steps.plan.outputs.version }}"
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then echo "$tag already exists"; exit 0; fi
-          git tag "$tag" "$GITHUB_SHA"
+          git tag "$tag" "${{ steps.plan.outputs.tag-sha }}"
           git push origin "refs/tags/$tag"
