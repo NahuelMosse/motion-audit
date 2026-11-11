@@ -36,8 +36,8 @@ test('engines require a Node that can require() ES modules without a flag', () =
 test('the workflow uses current checkout and setup-node majors', () => {
   const ci = read('.github', 'workflows', 'ci.yml');
   assert.ok(!/actions\/(checkout|setup-node)@v[1-4]\b/.test(ci));
-  assert.match(ci, /actions\/checkout@v5/);
-  assert.match(ci, /actions\/setup-node@v5/);
+  assert.match(ci, /actions\/checkout@v(?:[5-9]|\d{2,})/);
+  assert.match(ci, /actions\/setup-node@v(?:[5-9]|\d{2,})/);
 });
 
 // A stray file at the root (a mis-quoted shell command can create one) must not be committed.
