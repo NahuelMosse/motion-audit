@@ -30,3 +30,15 @@ test('--interrupt without --click is a usage error', () => {
   assert.throws(() => parseArgs(['x', '--interrupt']), /needs --click/);
   assert.equal(parseArgs(['x', '--click', '#a', '--interrupt']).opts.interrupt, true);
 });
+
+test('--frames without a selector takes the --click target, wherever it comes', () => {
+  assert.deepEqual(parseArgs(['x', '--frames', '--click', '#a']).opts.frames, ['#a']);
+  assert.deepEqual(parseArgs(['x', '--click', '#a', '--frames']).opts.frames, ['#a']);
+  assert.deepEqual(parseArgs(['x', '--frames', '.b', '--frames', '--click', '#a']).opts.frames, ['.b', '#a']);
+  assert.deepEqual(parseArgs(['x', '--frames=.b']).opts.frames, ['.b']);
+});
+
+test('--frames without a selector and without --click is a usage error', () => {
+  assert.throws(() => parseArgs(['x', '--frames']), /--frames without a selector needs --click/);
+  assert.throws(() => parseArgs(['x', '--frames', '--json']), /needs --click/);
+});

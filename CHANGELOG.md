@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- CLI: without a URL the audit takes `APP_URL`; a page on the internet that answers a bot wall or an error page
+  (status 400 or more, a challenge title or text) exits 2 instead of being audited; `--frames` with no selector
+  takes the `--click` target (a usage error without `--click`).
+- TypeScript declarations for the library entry (`types` condition in `exports`, generated into `types/` from the
+  JSDoc of the public API).
+- CI: lint (`node --check` over every `.mjs`), a type-check of the whole tree and a check that `types/` is up to
+  date; `actions/checkout` and `actions/setup-node` move to v7 (the workflow test accepts any major from 5 on).
+- The skill directory carries its own `LICENSE` and `NOTICES.md`.
+- `1.0.1-rc.0` (npm dist-tag `next`) only tested trusted publishing: it has no code changes.
+
 ## 1.0.0
 
 First release as an installable plugin and as the npm package `motion-audit`. The package ships the

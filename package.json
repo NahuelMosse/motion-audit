@@ -27,12 +27,17 @@
   "bin": {
     "motion-audit": "skills/motion-audit/scripts/motion-audit.mjs"
   },
+  "types": "./types/index.d.mts",
   "exports": {
-    ".": "./skills/motion-audit/scripts/lib/index.mjs",
+    ".": {
+      "types": "./types/index.d.mts",
+      "default": "./skills/motion-audit/scripts/lib/index.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "skills/motion-audit",
+    "types",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -49,12 +54,17 @@
   },
   "scripts": {
     "test": "node --test --test-concurrency=2 \"test/**/*.test.mjs\"",
-    "test:unit": "node --test test/args.test.mjs test/config.test.mjs test/continuity.test.mjs test/docs.test.mjs test/gates.test.mjs test/press-count.test.mjs test/residuals.test.mjs test/sightings.test.mjs test/judge.test.mjs test/long-frames.test.mjs test/package.test.mjs test/playwright-resolution.test.mjs test/release-plan.test.mjs test/reduced-and-compare.test.mjs test/segments.test.mjs test/series.test.mjs test/skill-doc.test.mjs",
+    "test:unit": "node --test test/args.test.mjs test/bot-wall.test.mjs test/config.test.mjs test/continuity.test.mjs test/docs.test.mjs test/gates.test.mjs test/press-count.test.mjs test/residuals.test.mjs test/sightings.test.mjs test/judge.test.mjs test/long-frames.test.mjs test/package.test.mjs test/playwright-resolution.test.mjs test/release-plan.test.mjs test/reduced-and-compare.test.mjs test/segments.test.mjs test/series.test.mjs test/skill-doc.test.mjs",
     "test:browser": "node --test --test-concurrency=1 test/cli.test.mjs test/detection.test.mjs test/fixtures.test.mjs test/package-install.test.mjs test/interact-safety.test.mjs test/readme-example.test.mjs test/redirect.test.mjs",
-    "fixtures": "node test/helpers/fixture-runs.mjs 3"
+    "fixtures": "node test/helpers/fixture-runs.mjs 3",
+    "lint": "node .github/scripts/check-syntax.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "types": "tsc -p tsconfig.types.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.59",
-    "playwright": "^1.59"
+    "@types/node": "^22.20.5",
+    "playwright": "^1.59",
+    "typescript": "7.0.2"
   }
 }

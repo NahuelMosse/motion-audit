@@ -29,6 +29,10 @@ npx motion-audit compare ref.json mine.json
 Exit `0` clean, `1` findings, `2` could not run or audited nothing. Audit a production build
 (`next start`, `vite preview`): on a dev server long frames are downgraded to warnings.
 
+Without a URL the CLI audits `$APP_URL`. A page on the internet is requested first, and when it answers a bot wall
+or an error page (status 400 or more, a challenge title such as "Just a moment", or challenge text) the run exits 2
+instead of auditing it; local addresses (`localhost`, `127.0.0.1`, `[::1]`, `*.localhost`) and files are never checked.
+
 | Option | Meaning |
 |---|---|
 | `--only <sel>` | audit only matching controls (repeatable) |
@@ -38,7 +42,7 @@ Exit `0` clean, `1` findings, `2` could not run or audited nothing. Audit a prod
 | `--click <sel>` `--interrupt` | record a real click (and a second one half-way); clicks the target twice, four times with `--interrupt`, and at most eight times (sixteen) when sparse frames or a flaky finding force a re-measure (a retry adds one press, and a press's effect has to land within 1.5 s: a request still pending at the next reload is reported in the notes, but one a timer sends later cannot be seen; when the count would end odd without `--interrupt` the target is pressed once more, so the state it keeps ends as it began; with `--interrupt` every recording presses twice and the count is always even): throwaway environments only |
 | `--allow-redirect` | audit the page the URL redirects to; without it any redirect, from the server or from script, exits 2, and a login page always does |
 | `--cpu <rate>` | CPU throttle, 4 is a mid-range phone |
-| `--frames <sel>` | contact sheet of hover and press with real timestamps |
+| `--frames [<sel>]` | contact sheet of hover and press with real timestamps; without a selector, of the `--click` target (repeatable) |
 | `--entrances` | also report sections without an entrance (info) |
 | `--storage-state <file>` | logged-in Playwright storage state; a redirect to a login page exits 2 |
 | `--wait-for <sel>` | wait for a selector before auditing |
@@ -92,7 +96,7 @@ test('orders: motion', async ({ page }) => {
 
 `audit(pageOrUrl, options)` takes a Playwright `page` (its `baseURL` and `storageState` apply) or a URL
 (options: `only`, `max`, `cpu`, `click`, `interrupt`, `interact`, `frames`, `entrances`, `config`,
-`baseline`, `storageState`, `waitFor`, `allowRedirect`, `out`). With a `page`, the CPU throttle is
+`baseline`, `storageState`, `waitFor`, `allowRedirect`, `out`; TypeScript types ship in the package). With a `page`, the CPU throttle is
 removed, the CDP session detached and the tracer stopped and unregistered when the audit ends. Or from
 the shell, failing on new findings only:
 
