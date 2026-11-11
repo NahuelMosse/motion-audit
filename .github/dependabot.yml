@@ -4,11 +4,21 @@ updates:
     directory: /
     schedule:
       interval: daily
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: daily
+    open-pull-requests-limit: 10
     # Patch and minor updates arrive in one pull request: two at once would both raise the same version and conflict.
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    # @types/node describes the oldest Node the package supports (engines: >=22.12); a newer major would let the
+    # type check accept APIs that Node 22 lacks. It moves to a new major only together with engines.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
