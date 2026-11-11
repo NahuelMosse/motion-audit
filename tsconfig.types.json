@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "checkJs": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "skills/motion-audit/scripts/lib",
+    "outDir": "types"
+  },
+  "include": ["skills/motion-audit/scripts/lib/**/*.mjs", "test/helpers/page-globals.d.ts"]
+}

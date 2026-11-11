@@ -45,7 +45,7 @@ test('the tracked files at the repository root are all on the list of expected o
   let tracked;
   try { tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { t.skip('not a git checkout (git ls-files failed): there are no tracked files to list'); return; }
   const root = tracked.filter((f) => !f.includes('/')).sort();
-  const allowed = ['.gitattributes', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'README.md', 'SECURITY.md', 'package-lock.json', 'package.json'];
+  const allowed = ['.gitattributes', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'README.md', 'SECURITY.md', 'package-lock.json', 'package.json', 'tsconfig.json', 'tsconfig.types.json'];
   assert.deepEqual(root.filter((f) => !allowed.includes(f)), [], 'a file at the root that is not on the list');
 });
 
@@ -65,11 +65,12 @@ test('package.json is publishable, points inside the skill directory and matches
   assert.equal(pkg.private, undefined);
   assert.equal(pkg.version, json('.claude-plugin', 'plugin.json').version);
   assert.deepEqual(pkg.bin, { 'motion-audit': 'skills/motion-audit/scripts/motion-audit.mjs' });
-  assert.deepEqual(pkg.exports, { '.': './skills/motion-audit/scripts/lib/index.mjs', './package.json': './package.json' });
+  assert.deepEqual(pkg.exports, { '.': { types: './types/index.d.mts', default: './skills/motion-audit/scripts/lib/index.mjs' }, './package.json': './package.json' });
+  assert.equal(pkg.types, pkg.exports['.'].types);
   assert.deepEqual(pkg.publishConfig, { access: 'public', provenance: true });
   assert.equal(pkg.dependencies, undefined, 'zero runtime dependencies');
   assert.match(pkg.repository.url, /^git\+https:\/\/github\.com\/NahuelMosse\/motion-audit\.git$/);
-  assert.ok(existsSync(join(ROOT, pkg.bin['motion-audit'])) && existsSync(join(ROOT, pkg.exports['.'])));
+  assert.ok(existsSync(join(ROOT, pkg.bin['motion-audit'])) && existsSync(join(ROOT, pkg.exports['.'].default)) && existsSync(join(ROOT, pkg.types)));
 });
 
 test('the tarball holds exactly the expected files, and no fixture', async () => {

@@ -98,3 +98,23 @@ jobs:
       - name: Validate the plugin
         run: |
           npx --yes @anthropic-ai/claude-code@2.1.316 plugin validate .
+
+  # Every .mjs parses, the whole tree type-checks (checkJs over the JSDoc and the inferred types), and the declarations
+  # under types/ are what `npm run types` generates from the library.
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Declarations are up to date
+        run: |
+          npm run types
+          git add --intent-to-add types
+          git diff --exit-code -- types
