@@ -6,6 +6,10 @@ ease-in curves and off-band durations, animations that jump or restart when inte
 `prefers-reduced-motion` that is missing or broken. It records the element and its children on every
 animation frame instead of trusting what the CSS declares.
 
+![motion-audit finding real issues: buttons with no hover feedback and animated layout](docs/demo.gif)
+
+More demos and install options: https://lab.nawi.dev/tools/
+
 It is **observe-only by default**: it hovers, forces `:active` and `:focus-visible` over the DevTools
 protocol, scrolls and reads. It never clicks unless you pass `--interact` (or name a control with
 `--click`), so it cannot toggle a Follow button or submit a form, and no focus, key or press handler
